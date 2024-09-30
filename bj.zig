@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const CARDS_PER_DECK: u16 = 52;
 pub const MAX_DECKS: u16 = 8;
 pub const MAX_CARDS_PER_HAND: u8 = 11;
@@ -75,7 +77,7 @@ const shuffle_specs: [8][2]u8 = [8][2]u8{
     [2]u8{ 80, 1 },
 };
 
-const faces: [14][4][]const u8 = [14][4][]const u8{
+pub const faces: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "A♠", "A♥", "A♣", "A♦" },
     [4][]const u8{ "2♠", "2♥", "2♣", "2♦" },
     [4][]const u8{ "3♠", "3♥", "3♣", "3♦" },
@@ -92,7 +94,7 @@ const faces: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "??", "", "", "" },
 };
 
-const faces2: [14][4][]const u8 = [14][4][]const u8{
+pub const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂡", "🂱", "🃁", "🃑" },
     [4][]const u8{ "🂢", "🂲", "🃂", "🃒" },
     [4][]const u8{ "🂣", "🂳", "🃃", "🃓" },
@@ -109,8 +111,38 @@ const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂠", "", "", "" },
 };
 
-pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) void {
-    const total_cards = 52; // get_total_cards(game);
+fn get_total_cards(game: *Game) u32 {
+    return game.num_decks * CARDS_PER_DECK;
+}
+
+fn swap(a: *Card, b: *Card) void {
+    const tmp = a.*;
+    a.* = b.*;
+    b.* = tmp;
+}
+
+fn myrand(min: u32, max: u32) !u32 {
+    var seed: u64 = undefined;
+    try std.posix.getrandom(std.mem.asBytes(&seed));
+    var prng = std.rand.DefaultPrng.init(seed);
+    const rand = prng.random();
+
+    return rand.intRangeAtMost(u32, min, max);
+}
+
+fn shuffle(shoe: *Shoe) !void {
+    for (0..7) |_| {
+        var i = shoe.num_cards - 1;
+        while (i > 0) : (i -= 1) {
+            const rand_idx = try myrand(0, shoe.num_cards - 1);
+            swap(&shoe.cards[i], &shoe.cards[rand_idx]);
+        }
+    }
+    shoe.current_card = 0;
+}
+
+pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
+    const total_cards = get_total_cards(game);
     game.shoe.num_cards = 0;
     const suites: [4]u8 = [4]u8{ 0, 1, 2, 3 };
 
@@ -132,5 +164,5 @@ pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) void {
         }
     }
 
-    // shuffle(&game.shoe);
+    try shuffle(&game.shoe);
 }
