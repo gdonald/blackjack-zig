@@ -63,8 +63,8 @@ pub const Game = struct {
     total_player_hands: u8,
     quitting: bool,
     shuffle_specs: *const [8][2]u8,
-    faces: *const [4]*const u8,
-    faces2: *const [4]*const u8,
+    faces: *const [14][4][]const u8,
+    faces2: *const [14][4][]const u8,
 };
 
 pub const shuffle_specs: [8][2]u8 = [8][2]u8{
@@ -158,8 +158,8 @@ pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
                     break;
                 }
 
-                const c = Card{ .suit = suit, .value = values[value_count] };
-                game.shoe.cards[game.shoe.num_cards] = c;
+                const card = Card{ .suit = suit, .value = values[value_count] };
+                game.shoe.cards[game.shoe.num_cards] = card;
                 game.shoe.num_cards += 1;
             }
         }
@@ -221,6 +221,157 @@ pub fn deal_card(shoe: *Shoe, hand: *Hand) void {
     shoe.current_card += 1;
 }
 
+pub fn is_ace(card: *const Card) bool {
+    return card.value == 0;
+}
+
+pub fn is_ten(card: *const Card) bool {
+    return card.value > 8;
+}
+
+pub fn dealer_upcard_is_ace(dealer_hand: *const DealerHand) bool {
+    return is_ace(&dealer_hand.hand.cards[0]);
+}
+
+pub fn is_blackjack(hand: *const Hand) bool {
+    if (hand.num_cards != 2) {
+        return false;
+    }
+
+    if (is_ace(&hand.cards[0]) and is_ten(&hand.cards[1])) {
+        return true;
+    }
+
+    return is_ace(&hand.cards[1]) and is_ten(&hand.cards[0]);
+}
+
+pub fn get_card_face(game: *const Game, value: u8, suit: u8) []const u8 {
+    if (game.face_type == 2) {
+        return game.faces2[value][suit];
+    }
+    return game.faces[value][suit];
+}
+
+pub fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32 {
+    var v: u32 = 0;
+    var total: u32 = 0;
+    var tmp_v: u32 = 0;
+
+    for (0..dealer_hand.hand.num_cards) |x| {
+        if (x == 1 and dealer_hand.hide_down_card) {
+            continue;
+        }
+
+        tmp_v = dealer_hand.hand.cards[x].value + 1;
+        v = if (tmp_v > 9) 10 else tmp_v;
+
+        if (method == .Soft and v == 1 and total < 11) {
+            v = 11;
+        }
+
+        total += v;
+    }
+
+    if (method == .Soft and total > 21) {
+        return dealer_get_value(dealer_hand, .Hard);
+    }
+
+    return total;
+}
+
+pub fn draw_dealer_hand(game: *const Game) void {
+    const dealer_hand = &game.dealer_hand;
+    var card: *const Card = undefined;
+
+    std.debug.print(" ", .{});
+
+    for (0..dealer_hand.hand.num_cards) |i| {
+        if (i == 1 and dealer_hand.hide_down_card) {
+            std.debug.print("{s} ", .{get_card_face(game, 13, 0)});
+        } else {
+            card = &dealer_hand.hand.cards[i];
+            std.debug.print("{s} ", .{get_card_face(game, card.value, card.suit)});
+        }
+    }
+
+    std.debug.print(" ⇒  {d}\n", .{dealer_get_value(dealer_hand, .Soft)});
+}
+
+pub fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
+    var total: u32 = 0;
+
+    for (0..player_hand.hand.num_cards) |x| {
+        const tmp_v: u32 = player_hand.hand.cards[x].value + 1;
+        var v: u32 = if (tmp_v > 9) 10 else tmp_v;
+
+        if (method == .Soft and v == 1 and total < 11) {
+            v = 11;
+        }
+
+        total += v;
+    }
+
+    if (method == .Soft and total > 21) {
+        return player_get_value(player_hand, .Hard);
+    }
+
+    return total;
+}
+
+pub fn player_is_busted(player_hand: *const PlayerHand) bool {
+    return player_get_value(player_hand, .Soft) > 21;
+}
+
+pub fn player_draw_hand(game: *const Game, index: usize) void {
+    const player_hand = &game.player_hands[index];
+
+    std.debug.print(" ", .{});
+
+    for (0..player_hand.hand.num_cards) |i| {
+        const card = &player_hand.hand.cards[i];
+        std.debug.print("{s} ", .{get_card_face(game, card.value, card.suit)});
+    }
+
+    std.debug.print(" ⇒  {d}  ", .{player_get_value(player_hand, .Soft)});
+
+    switch (player_hand.status) {
+        .Lost => std.debug.print("-", .{}),
+        .Won => std.debug.print("+", .{}),
+        else => {},
+    }
+
+    const bet: f64 = @as(f64, @floatFromInt(player_hand.bet));
+    std.debug.print("${:.2}", .{bet / 100.0});
+
+    if (!player_hand.played and index == game.current_player_hand) {
+        std.debug.print(" ⇐", .{});
+    }
+
+    std.debug.print("  ", .{});
+
+    switch (player_hand.status) {
+        .Lost => std.debug.print("{s}", .{if (player_is_busted(player_hand)) "Busted!" else "Lose!"}),
+        .Won => std.debug.print("{s}", .{if (is_blackjack(&player_hand.hand)) "Blackjack!" else "Won!"}),
+        .Push => std.debug.print("Push", .{}),
+        else => {},
+    }
+
+    std.debug.print("\n\n", .{});
+}
+
+pub fn draw_hands(game: *const Game) void {
+    // clear();
+    std.debug.print("\n Dealer: \n", .{});
+    draw_dealer_hand(game);
+
+    const money: f64 = @as(f64, @floatFromInt(game.money));
+    std.debug.print("\n Player ${:.2}:\n", .{money / 100.0});
+
+    for (0..game.total_player_hands) |x| {
+        player_draw_hand(game, x);
+    }
+}
+
 pub fn deal_new_hand(game: *Game) !void {
     var player_hand = PlayerHand{
         .hand = Hand{
@@ -252,10 +403,10 @@ pub fn deal_new_hand(game: *Game) !void {
     game.current_player_hand = 0;
     game.total_player_hands = 1;
 
-    // if (dealer_upcard_is_ace(dealer_hand) && !is_blackjack(&player_hand.hand)) {
-    //     draw_hands(game);
-    //     ask_insurance(game);
-    //     return;
+    // if (dealer_upcard_is_ace(dealer_hand) and !is_blackjack(&player_hand.hand)) {
+    draw_hands(game);
+    // ask_insurance(game);
+    return;
     // }
 
     // if (player_is_done(game, &player_hand)) {
