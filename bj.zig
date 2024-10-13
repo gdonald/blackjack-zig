@@ -359,8 +359,12 @@ pub fn player_draw_hand(game: *const Game, index: usize) void {
     std.debug.print("\n\n", .{});
 }
 
+pub fn clear() void {
+    std.debug.print("\x1b[2J\x1b[H", .{});
+}
+
 pub fn draw_hands(game: *const Game) void {
-    // clear();
+    clear();
     std.debug.print("\n Dealer: \n", .{});
     draw_dealer_hand(game);
 
