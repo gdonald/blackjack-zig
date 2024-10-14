@@ -45,8 +45,8 @@ pub fn main() !u8 {
         .num_decks = 1,
         .deck_type = 0,
         .face_type = 0,
-        .money = 0,
-        .current_bet = 0,
+        .money = 10000,
+        .current_bet = 500,
         .current_player_hand = 0,
         .total_player_hands = 0,
         .quitting = false,
@@ -55,27 +55,11 @@ pub fn main() !u8 {
         .faces2 = &bj.faces2,
     };
 
-    // while (!game.quitting) {
-    try bj.deal_new_hand(&game);
-    // }
+    try bj.load_game(&game);
 
-    // for (0..game.shoe.num_cards) |i| {
-    //     const card = game.shoe.cards[i];
-    //     const card_str = bj.faces[card.value][card.suit];
-    //     std.debug.print("{d}: {s}\n", .{ i, card_str });
-    // }
-
-    // for (0..game.player_hands[0].hand.num_cards) |i| {
-    //     const card = game.player_hands[0].hand.cards[i];
-    //     const card_str = bj.faces[card.value][card.suit];
-    //     std.debug.print("{d}: {s}\n", .{ i, card_str });
-    // }
-
-    // for (0..game.dealer_hand.hand.num_cards) |i| {
-    //     const card = game.dealer_hand.hand.cards[i];
-    //     const card_str = bj.faces[card.value][card.suit];
-    //     std.debug.print("{d}: {s}\n", .{ i, card_str });
-    // }
+    while (!game.quitting) {
+        try bj.deal_new_hand(&game);
+    }
 
     return 0;
 }

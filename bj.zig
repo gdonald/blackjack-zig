@@ -192,27 +192,52 @@ pub fn new_regular(game: *Game) !void {
     try new_shoe(game, &values, 13);
 }
 
+pub fn new_aces(game: *Game) !void {
+    const values: [1]u8 = [1]u8{0};
+    try new_shoe(game, &values, 1);
+}
+
+pub fn new_jacks(game: *Game) !void {
+    const values: [1]u8 = [1]u8{10};
+    try new_shoe(game, &values, 1);
+}
+
+pub fn new_aces_jacks(game: *Game) !void {
+    const values: [2]u8 = [2]u8{ 0, 10 };
+    try new_shoe(game, &values, 2);
+}
+
+pub fn new_sevens(game: *Game) !void {
+    const values: [1]u8 = [1]u8{6};
+    try new_shoe(game, &values, 1);
+}
+
+pub fn new_eights(game: *Game) !void {
+    const values: [1]u8 = [1]u8{7};
+    try new_shoe(game, &values, 1);
+}
+
 pub fn build_new_shoe(game: *Game) !void {
-    // switch (game.deck_type) {
-    //     2 => {
-    //         new_aces(game);
-    //     },
-    //     3 => {
-    //         new_jacks(game);
-    //     },
-    //     4 => {
-    //         new_aces_jacks(game);
-    //     },
-    //     5 => {
-    //         new_sevens(game);
-    //     },
-    //     6 => {
-    //         new_eights(game);
-    //     },
-    //     else => {
-    try new_regular(game);
-    //     },
-    // }
+    switch (game.deck_type) {
+        2 => {
+            try new_aces(game);
+        },
+        3 => {
+            try new_jacks(game);
+        },
+        4 => {
+            try new_aces_jacks(game);
+        },
+        5 => {
+            try new_sevens(game);
+        },
+        6 => {
+            try new_eights(game);
+        },
+        else => {
+            try new_regular(game);
+        },
+    }
 }
 
 pub fn deal_card(shoe: *Shoe, hand: *Hand) void {
@@ -515,6 +540,35 @@ pub fn save_game(game: *const Game) !void {
     }) catch return error.BufferOverflow;
 
     try file.writeAll(buffer[0..writer.len]);
+}
+
+pub fn load_game(game: *Game) !void {
+    const file: std.fs.File = std.fs.cwd().openFile(SAVE_FILE, .{}) catch {
+        return;
+    };
+    defer file.close();
+
+    var buffer: [32]u8 = undefined;
+
+    const num_decks = try read_u32_from_file(file, &buffer);
+    const money = try read_u32_from_file(file, &buffer);
+    const current_bet = try read_u32_from_file(file, &buffer);
+    const deck_type = try read_u32_from_file(file, &buffer);
+    const face_type = try read_u32_from_file(file, &buffer);
+
+    game.num_decks = @truncate(num_decks);
+    game.money = money;
+    game.current_bet = current_bet;
+    game.deck_type = @truncate(deck_type);
+    game.face_type = @truncate(face_type);
+}
+
+fn read_u32_from_file(file: std.fs.File, buffer: *[32]u8) !u32 {
+    const reader = file.reader();
+    const line = try reader.readUntilDelimiterOrEof(buffer[0..], '\n');
+    const line_slice = line orelse return error.InvalidData;
+
+    return std.fmt.parseInt(u32, line_slice, 10) catch 0;
 }
 
 pub fn pay_hands(game: *Game) !void {
@@ -863,13 +917,12 @@ pub fn player_get_action(game: *Game) anyerror!void {
     std.debug.print("\n", .{});
 
     var stdin = std.io.getStdIn();
-    var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
+        const result = stdin.reader().readByte() catch return;
         if (result == 0) continue;
 
-        switch (input[0] | 0x20) {
+        switch (result | 0x20) {
             'h' => try player_hit(game),
             's' => try player_stand(game),
             'p' => try player_split(game),
