@@ -699,8 +699,7 @@ pub fn game_options(game: *Game) !void {
         const result = stdin.read(input[0..1]) catch return;
         if (result == 0) continue;
 
-        const action = input[0] | 0x20;
-        switch (action) {
+        switch (input[0] | 0x20) {
             'n' => try get_new_num_decks(game),
             't' => try get_new_deck_type(game),
             'f' => try get_new_face_type(game),
@@ -731,8 +730,7 @@ pub fn bet_options(game: *Game) anyerror!void {
         const result = stdin.read(input[0..1]) catch return;
         if (result == 0) continue;
 
-        const action = input[0] | 0x20;
-        switch (action) {
+        switch (input[0] | 0x20) {
             'd' => {},
             'b' => try get_new_bet(game),
             'o' => try game_options(game),
@@ -775,7 +773,85 @@ pub fn player_hit(game: *Game) anyerror!void {
     try player_get_action(game);
 }
 
-pub fn player_get_action(game: *Game) !void {
+pub fn player_stand(game: *Game) !void {
+    var player_hand = &game.player_hands[game.current_player_hand];
+
+    player_hand.stood = true;
+    player_hand.played = true;
+
+    if (more_hands_to_play(game)) {
+        try play_more_hands(game);
+        return;
+    }
+
+    try play_dealer_hand(game);
+    draw_hands(game);
+    try bet_options(game);
+}
+
+pub fn player_split(game: *Game) !void {
+    const new_hand = PlayerHand{
+        .bet = game.current_bet,
+        .hand = Hand{
+            .cards = undefined,
+            .num_cards = 0,
+        },
+        .played = false,
+        .paid = false,
+        .stood = false,
+        .status = HandStatus.Unknown,
+    };
+    var hand_count = game.total_player_hands;
+    var this_hand: *PlayerHand = undefined;
+    var split_hand: *PlayerHand = undefined;
+    var card: Card = undefined;
+
+    if (!player_can_split(game)) {
+        draw_hands(game);
+        try player_get_action(game);
+        return;
+    }
+
+    game.player_hands[game.total_player_hands] = new_hand;
+    game.total_player_hands += 1;
+
+    while (hand_count > game.current_player_hand) {
+        game.player_hands[hand_count] = game.player_hands[hand_count - 1];
+        hand_count -= 1;
+    }
+
+    this_hand = &game.player_hands[game.current_player_hand];
+    split_hand = &game.player_hands[game.current_player_hand + 1];
+
+    card = this_hand.hand.cards[1];
+    split_hand.hand.cards[0] = card;
+    split_hand.hand.num_cards = 1;
+    this_hand.hand.num_cards = 1;
+
+    deal_card(&game.shoe, &this_hand.hand);
+
+    if (player_is_done(game, this_hand)) {
+        try process(game);
+        return;
+    }
+
+    draw_hands(game);
+    try player_get_action(game);
+}
+
+pub fn player_dbl(game: *Game) !void {
+    var player_hand = &game.player_hands[game.current_player_hand];
+
+    deal_card(&game.shoe, &player_hand.hand);
+    player_hand.played = true;
+    player_hand.bet *= 2;
+
+    if (player_is_done(game, player_hand)) {
+        try process(game);
+    }
+}
+
+pub fn player_get_action(game: *Game) anyerror!void {
     const player_hand = &game.player_hands[game.current_player_hand];
     std.debug.print(" ", .{});
 
@@ -793,17 +869,84 @@ pub fn player_get_action(game: *Game) !void {
         const result = stdin.read(input[0..1]) catch return;
         if (result == 0) continue;
 
-        const action = input[0] | 0x20;
-
-        switch (action) {
+        switch (input[0] | 0x20) {
             'h' => try player_hit(game),
-            // 's' => player_stand(game),
-            // 'p' => player_split(game),
-            // 'd' => player_dbl(game),
+            's' => try player_stand(game),
+            'p' => try player_split(game),
+            'd' => try player_dbl(game),
             else => {
                 clear();
                 draw_hands(game);
                 try player_get_action(game);
+                return;
+            },
+        }
+
+        break;
+    }
+}
+
+pub fn insure_hand(game: *Game) !void {
+    var player_hand = &game.player_hands[game.current_player_hand];
+
+    player_hand.bet /= 2;
+    player_hand.played = true;
+    player_hand.paid = true;
+    player_hand.status = .Lost;
+    game.money -= player_hand.bet;
+
+    draw_hands(game);
+    try bet_options(game);
+}
+
+pub fn no_insurance(game: *Game) !void {
+    var dealer_hand = &game.dealer_hand;
+    var player_hand: *PlayerHand = undefined;
+
+    if (is_blackjack(&dealer_hand.hand)) {
+        dealer_hand.hide_down_card = false;
+        try pay_hands(game);
+        draw_hands(game);
+        try bet_options(game);
+        return;
+    }
+
+    player_hand = &game.player_hands[game.current_player_hand];
+
+    if (player_is_done(game, player_hand)) {
+        try play_dealer_hand(game);
+        draw_hands(game);
+        try bet_options(game);
+        return;
+    }
+
+    draw_hands(game);
+    try player_get_action(game);
+}
+
+pub fn ask_insurance(game: *Game) !void {
+    std.debug.print(" Insurance?  (Y) Yes  (N) No\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        switch (input[0] | 0x20) {
+            'y' => {
+                try insure_hand(game);
+                break;
+            },
+            'n' => {
+                try no_insurance(game);
+                break;
+            },
+            else => {
+                clear();
+                draw_hands(game);
+                try ask_insurance(game);
                 return;
             },
         }
@@ -843,21 +986,21 @@ pub fn deal_new_hand(game: *Game) !void {
     game.current_player_hand = 0;
     game.total_player_hands = 1;
 
-    // if (dealer_upcard_is_ace(dealer_hand) and !is_blackjack(&player_hand.hand)) {
-    //     draw_hands(game);
-    //     ask_insurance(game);
-    //     return;
-    // }
+    if (dealer_upcard_is_ace(dealer_hand) and !is_blackjack(&player_hand.hand)) {
+        draw_hands(game);
+        try ask_insurance(game);
+        return;
+    }
 
-    // if (player_is_done(game, &player_hand)) {
-    //     dealer_hand.hide_down_card = false;
-    //     pay_hands(game);
-    //     draw_hands(game);
-    //     bet_options(game);
-    //     return;
-    // }
+    if (player_is_done(game, &player_hand)) {
+        dealer_hand.hide_down_card = false;
+        try pay_hands(game);
+        draw_hands(game);
+        try bet_options(game);
+        return;
+    }
 
     draw_hands(game);
     try player_get_action(game);
-    // save_game(game);
+    try save_game(game);
 }
