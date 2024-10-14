@@ -341,7 +341,7 @@ pub fn player_draw_hand(game: *const Game, index: usize) void {
     }
 
     const bet: f64 = @as(f64, @floatFromInt(player_hand.bet));
-    std.debug.print("${:.2}", .{bet / 100.0});
+    std.debug.print("${d:.2}", .{bet / 100.0});
 
     if (!player_hand.played and index == game.current_player_hand) {
         std.debug.print(" ⇐", .{});
@@ -369,10 +369,446 @@ pub fn draw_hands(game: *const Game) void {
     draw_dealer_hand(game);
 
     const money: f64 = @as(f64, @floatFromInt(game.money));
-    std.debug.print("\n Player ${:.2}:\n", .{money / 100.0});
+    std.debug.print("\n Player ${d:.2}:\n", .{money / 100.0});
 
     for (0..game.total_player_hands) |x| {
         player_draw_hand(game, x);
+    }
+}
+
+pub fn player_can_hit(player_hand: *const PlayerHand) bool {
+    return !player_hand.played and
+        !player_hand.stood and
+        player_get_value(player_hand, .Hard) != 21 and
+        !is_blackjack(&player_hand.hand) and
+        !player_is_busted(player_hand);
+}
+
+pub fn player_can_stand(player_hand: *const PlayerHand) bool {
+    return !player_hand.stood and
+        !player_is_busted(player_hand) and
+        !is_blackjack(&player_hand.hand);
+}
+
+pub fn all_bets(game: *const Game) u32 {
+    var bets: u32 = 0;
+
+    for (game.player_hands[0..game.total_player_hands]) |player_hand| {
+        bets += player_hand.bet;
+    }
+
+    return bets;
+}
+
+pub fn player_can_split(game: *const Game) bool {
+    const player_hand = &game.player_hands[game.current_player_hand];
+
+    if (player_hand.stood or game.total_player_hands >= MAX_PLAYER_HANDS) {
+        return false;
+    }
+
+    if (game.money < all_bets(game) + player_hand.bet) {
+        return false;
+    }
+
+    return player_hand.hand.num_cards == 2 and
+        player_hand.hand.cards[0].value == player_hand.hand.cards[1].value;
+}
+
+pub fn player_can_dbl(game: *const Game) bool {
+    const player_hand = &game.player_hands[game.current_player_hand];
+
+    if (game.money < all_bets(game) + player_hand.bet) {
+        return false;
+    }
+
+    if (player_hand.stood or
+        player_hand.hand.num_cards != 2 or
+        player_is_busted(player_hand) or
+        is_blackjack(&player_hand.hand))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
+    if (player_hand.played or
+        player_hand.stood or
+        is_blackjack(&player_hand.hand) or
+        player_is_busted(player_hand) or
+        player_get_value(player_hand, .Soft) == 21 or
+        player_get_value(player_hand, .Hard) == 21)
+    {
+        player_hand.played = true;
+
+        if (!player_hand.paid and player_is_busted(player_hand)) {
+            player_hand.paid = true;
+            player_hand.status = .Lost;
+            game.money -= player_hand.bet;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+pub fn more_hands_to_play(game: *const Game) bool {
+    return game.current_player_hand < game.total_player_hands - 1;
+}
+
+pub fn play_more_hands(game: *Game) anyerror!void {
+    game.current_player_hand += 1;
+    var player_hand = &game.player_hands[game.current_player_hand];
+    deal_card(&game.shoe, &player_hand.hand);
+
+    if (player_is_done(game, player_hand)) {
+        try process(game);
+        return;
+    }
+
+    draw_hands(game);
+    try player_get_action(game);
+}
+
+pub fn need_to_play_dealer_hand(game: *const Game) bool {
+    for (game.player_hands[0..game.total_player_hands]) |player_hand| {
+        if (!(player_is_busted(&player_hand) or
+            is_blackjack(&player_hand.hand)))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+pub fn dealer_is_busted(dealer_hand: *const DealerHand) bool {
+    return dealer_get_value(dealer_hand, .Soft) > 21;
+}
+
+pub fn normalize_bet(game: *Game) void {
+    if (game.current_bet < MIN_BET) {
+        game.current_bet = MIN_BET;
+    } else if (game.current_bet > MAX_BET) {
+        game.current_bet = MAX_BET;
+    }
+
+    if (game.current_bet > game.money) {
+        game.current_bet = @truncate(game.money);
+    }
+}
+
+pub fn save_game(game: *const Game) !void {
+    var file = std.fs.cwd().openFile(SAVE_FILE, .{}) catch return;
+    defer file.close();
+
+    var buffer: [128]u8 = undefined;
+    const writer = std.fmt.bufPrint(&buffer, "{d}\n{d}\n{d}\n{d}\n{d}\n", .{
+        game.num_decks,
+        game.money,
+        game.current_bet,
+        game.deck_type,
+        game.face_type,
+    }) catch return error.BufferOverflow;
+
+    try file.writeAll(buffer[0..writer.len]);
+}
+
+pub fn pay_hands(game: *Game) !void {
+    const dealer_hand = &game.dealer_hand;
+    var player_hand: *PlayerHand = undefined;
+    const dhv = dealer_get_value(dealer_hand, .Soft);
+    const dhb = dealer_is_busted(dealer_hand);
+    var phv: u32 = 0;
+
+    for (0..game.total_player_hands) |x| {
+        player_hand = &game.player_hands[x];
+        if (player_hand.paid) continue;
+
+        player_hand.paid = true;
+        phv = player_get_value(player_hand, .Soft);
+
+        if (dhb or phv > dhv) {
+            if (is_blackjack(&player_hand.hand)) {
+                var bet: f64 = @floatFromInt(player_hand.bet);
+                bet *= 1.5;
+                const new_bet: u32 = @intFromFloat(bet);
+                player_hand.bet = new_bet;
+            }
+
+            game.money += player_hand.bet;
+            player_hand.status = .Won;
+        } else if (phv < dhv) {
+            game.money -= player_hand.bet;
+            player_hand.status = .Lost;
+        } else {
+            player_hand.status = .Push;
+        }
+    }
+
+    normalize_bet(game);
+    try save_game(game);
+}
+
+pub fn play_dealer_hand(game: *Game) !void {
+    var dealer_hand = &game.dealer_hand;
+    var soft_count: u32 = 0;
+    var hard_count: u32 = 0;
+
+    if (is_blackjack(&dealer_hand.hand)) {
+        dealer_hand.hide_down_card = false;
+    }
+
+    if (!need_to_play_dealer_hand(game)) {
+        try pay_hands(game);
+        return;
+    }
+
+    dealer_hand.hide_down_card = false;
+
+    soft_count = dealer_get_value(dealer_hand, .Soft);
+    hard_count = dealer_get_value(dealer_hand, .Hard);
+
+    while (soft_count < 18 and hard_count < 17) {
+        deal_card(&game.shoe, &dealer_hand.hand);
+        soft_count = dealer_get_value(dealer_hand, .Soft);
+        hard_count = dealer_get_value(dealer_hand, .Hard);
+    }
+
+    try pay_hands(game);
+}
+
+pub fn get_new_bet(game: *Game) !void {
+    var tmp: u32 = 0;
+
+    clear();
+    draw_hands(game);
+
+    std.debug.print("  Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
+
+    var buffer: [32]u8 = undefined;
+    _ = std.io.getStdIn().read(buffer[0..31]) catch return;
+
+    buffer[31] = 0;
+    tmp = std.fmt.parseInt(u32, &buffer, 10) catch 0;
+
+    game.current_bet = tmp * 100;
+    normalize_bet(game);
+    try save_game(game);
+    try deal_new_hand(game);
+}
+
+pub fn get_new_num_decks(game: *Game) anyerror!void {
+    var tmp: u8 = 0;
+
+    clear();
+    draw_hands(game);
+
+    std.debug.print("  Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
+
+    var buffer: [8]u8 = undefined;
+    _ = std.io.getStdIn().read(buffer[0..7]) catch return;
+
+    buffer[7] = 0;
+    tmp = std.fmt.parseInt(u8, &buffer, 10) catch 1;
+
+    if (tmp < 1) tmp = 1;
+    if (tmp > 8) tmp = 8;
+
+    game.num_decks = tmp;
+    try save_game(game);
+    try game_options(game);
+}
+
+pub fn get_new_deck_type(game: *Game) !void {
+    clear();
+    draw_hands(game);
+    std.debug.print(" (1) Regular  (2) Aces  (3) Jacks  (4) Aces & Jacks  (5) Sevens  (6) Eights\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        const tmp = std.fmt.parseInt(u8, input[0..1], 10) catch 0;
+        game.deck_type = @as(u8, tmp);
+
+        if (game.deck_type > 0 and game.deck_type < 7) {
+            if (game.deck_type > 1) {
+                game.num_decks = 8;
+            }
+            try build_new_shoe(game);
+        } else {
+            clear();
+            draw_hands(game);
+            try get_new_deck_type(game);
+            return;
+        }
+
+        try save_game(game);
+        draw_hands(game);
+        try bet_options(game);
+        break;
+    }
+}
+
+pub fn get_new_face_type(game: *Game) !void {
+    clear();
+    draw_hands(game);
+    std.debug.print(" (1) A♠  (2) 🂡\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        switch (input[0]) {
+            '1' => game.face_type = 1,
+            '2' => game.face_type = 2,
+            else => {
+                clear();
+                draw_hands(game);
+                try get_new_face_type(game);
+                return;
+            },
+        }
+
+        try save_game(game);
+        draw_hands(game);
+        try bet_options(game);
+        break;
+    }
+}
+
+pub fn game_options(game: *Game) !void {
+    clear();
+    draw_hands(game);
+    std.debug.print(" (N) Number of Decks  (T) Deck Type  (F) Face Type  (B) Back\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        const action = input[0] | 0x20;
+        switch (action) {
+            'n' => try get_new_num_decks(game),
+            't' => try get_new_deck_type(game),
+            'f' => try get_new_face_type(game),
+            'b' => {
+                clear();
+                draw_hands(game);
+                try bet_options(game);
+                return;
+            },
+            else => {
+                clear();
+                draw_hands(game);
+                try game_options(game);
+                return;
+            },
+        }
+        break;
+    }
+}
+
+pub fn bet_options(game: *Game) anyerror!void {
+    std.debug.print(" (D) Deal Hand  (B) Change Bet  (O) Options  (Q) Quit\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        const action = input[0] | 0x20;
+        switch (action) {
+            'd' => {},
+            'b' => try get_new_bet(game),
+            'o' => try game_options(game),
+            'q' => {
+                game.quitting = true;
+                clear();
+            },
+            else => {
+                clear();
+                draw_hands(game);
+                try bet_options(game);
+                return;
+            },
+        }
+        break;
+    }
+}
+
+pub fn process(game: *Game) !void {
+    if (more_hands_to_play(game)) {
+        try play_more_hands(game);
+        return;
+    }
+
+    try play_dealer_hand(game);
+    draw_hands(game);
+    try bet_options(game);
+}
+
+pub fn player_hit(game: *Game) anyerror!void {
+    var player_hand = &game.player_hands[game.current_player_hand];
+    deal_card(&game.shoe, &player_hand.hand);
+
+    if (player_is_done(game, player_hand)) {
+        try process(game);
+        return;
+    }
+
+    draw_hands(game);
+    try player_get_action(game);
+}
+
+pub fn player_get_action(game: *Game) !void {
+    const player_hand = &game.player_hands[game.current_player_hand];
+    std.debug.print(" ", .{});
+
+    if (player_can_hit(player_hand)) std.debug.print("(H) Hit  ", .{});
+    if (player_can_stand(player_hand)) std.debug.print("(S) Stand  ", .{});
+    if (player_can_split(game)) std.debug.print("(P) Split  ", .{});
+    if (player_can_dbl(game)) std.debug.print("(D) Double  ", .{});
+
+    std.debug.print("\n", .{});
+
+    var stdin = std.io.getStdIn();
+    var input: [1]u8 = undefined;
+
+    while (true) {
+        const result = stdin.read(input[0..1]) catch return;
+        if (result == 0) continue;
+
+        const action = input[0] | 0x20;
+
+        switch (action) {
+            'h' => try player_hit(game),
+            // 's' => player_stand(game),
+            // 'p' => player_split(game),
+            // 'd' => player_dbl(game),
+            else => {
+                clear();
+                draw_hands(game);
+                try player_get_action(game);
+                return;
+            },
+        }
+
+        break;
     }
 }
 
@@ -408,9 +844,9 @@ pub fn deal_new_hand(game: *Game) !void {
     game.total_player_hands = 1;
 
     // if (dealer_upcard_is_ace(dealer_hand) and !is_blackjack(&player_hand.hand)) {
-    draw_hands(game);
-    // ask_insurance(game);
-    return;
+    //     draw_hands(game);
+    //     ask_insurance(game);
+    //     return;
     // }
 
     // if (player_is_done(game, &player_hand)) {
@@ -421,7 +857,7 @@ pub fn deal_new_hand(game: *Game) !void {
     //     return;
     // }
 
-    // draw_hands(game);
-    // player_get_action(game);
+    draw_hands(game);
+    try player_get_action(game);
     // save_game(game);
 }
