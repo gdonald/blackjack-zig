@@ -55,11 +55,16 @@ pub fn main() !u8 {
         .faces2 = &bj.faces2,
     };
 
+    const stdin = std.io.getStdIn();
+    try bj.buffer_off(&stdin);
+
     try bj.load_game(&game);
 
     while (!game.quitting) {
         try bj.deal_new_hand(&game);
     }
+
+    try bj.buffer_on(&stdin);
 
     return 0;
 }

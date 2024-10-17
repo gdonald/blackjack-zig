@@ -1057,3 +1057,14 @@ pub fn deal_new_hand(game: *Game) !void {
     try player_get_action(game);
     try save_game(game);
 }
+
+pub fn buffer_on(stdin: *const std.fs.File) !void {
+    const term = try std.posix.tcgetattr(stdin.handle);
+    try std.posix.tcsetattr(stdin.handle, .NOW, term);
+}
+
+pub fn buffer_off(stdin: *const std.fs.File) !void {
+    var term = try std.posix.tcgetattr(stdin.handle);
+    term.lflag.ICANON = false;
+    try std.posix.tcsetattr(stdin.handle, .NOW, term);
+}
