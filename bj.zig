@@ -640,20 +640,14 @@ pub fn play_dealer_hand(game: *Game) !void {
 }
 
 pub fn get_new_bet(game: *Game) !void {
-    var tmp: u32 = 0;
-
     clear();
     draw_hands(game);
 
     std.debug.print(" Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
 
     var input: [32]u8 = undefined;
-
-    const stdin = std.io.getStdIn();
-    const reader = stdin.reader();
-
-    const result = try reader.readUntilDelimiter(&input, '\n');
-    tmp = std.fmt.parseInt(u32, result, 10) catch 0;
+    const result = try std.io.getStdIn().reader().readUntilDelimiter(&input, '\n');
+    const tmp = std.fmt.parseInt(u32, result, 10) catch 0;
 
     game.current_bet = tmp * 100;
     normalize_bet(game);
@@ -662,20 +656,14 @@ pub fn get_new_bet(game: *Game) !void {
 }
 
 pub fn get_new_num_decks(game: *Game) anyerror!void {
-    var tmp: u8 = 0;
-
     clear();
     draw_hands(game);
 
     std.debug.print(" Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
 
     var input: [8]u8 = undefined;
-
-    const stdin = std.io.getStdIn();
-    const reader = stdin.reader();
-
-    const result = try reader.readUntilDelimiter(&input, '\n');
-    tmp = std.fmt.parseInt(u8, result, 10) catch 1;
+    const result = try std.io.getStdIn().reader().readUntilDelimiter(&input, '\n');
+    var tmp = std.fmt.parseInt(u8, result, 10) catch 1;
 
     if (tmp < 1) tmp = 1;
     if (tmp > 8) tmp = 8;
