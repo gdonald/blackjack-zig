@@ -527,7 +527,10 @@ pub fn normalize_bet(game: *Game) void {
 }
 
 pub fn save_game(game: *const Game) !void {
-    var file = std.fs.cwd().openFile(SAVE_FILE, .{}) catch return;
+    const dir = std.fs.cwd();
+
+    _ = try dir.createFile(SAVE_FILE, .{});
+    var file = dir.openFile(SAVE_FILE, .{ .mode = .write_only }) catch return;
     defer file.close();
 
     var buffer: [128]u8 = undefined;
@@ -539,7 +542,8 @@ pub fn save_game(game: *const Game) !void {
         game.face_type,
     }) catch return error.BufferOverflow;
 
-    try file.writeAll(buffer[0..writer.len]);
+    var fw = file.writer();
+    try fw.writeAll(buffer[0..writer.len]);
 }
 
 pub fn load_game(game: *Game) !void {
@@ -641,13 +645,15 @@ pub fn get_new_bet(game: *Game) !void {
     clear();
     draw_hands(game);
 
-    std.debug.print("  Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
+    std.debug.print(" Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
 
-    var buffer: [32]u8 = undefined;
-    _ = std.io.getStdIn().read(buffer[0..31]) catch return;
+    var input: [32]u8 = undefined;
 
-    buffer[31] = 0;
-    tmp = std.fmt.parseInt(u32, &buffer, 10) catch 0;
+    const stdin = std.io.getStdIn();
+    const reader = stdin.reader();
+
+    const result = try reader.readUntilDelimiter(&input, '\n');
+    tmp = std.fmt.parseInt(u32, result, 10) catch 0;
 
     game.current_bet = tmp * 100;
     normalize_bet(game);
@@ -661,13 +667,15 @@ pub fn get_new_num_decks(game: *Game) anyerror!void {
     clear();
     draw_hands(game);
 
-    std.debug.print("  Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
+    std.debug.print(" Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
 
-    var buffer: [8]u8 = undefined;
-    _ = std.io.getStdIn().read(buffer[0..7]) catch return;
+    var input: [8]u8 = undefined;
 
-    buffer[7] = 0;
-    tmp = std.fmt.parseInt(u8, &buffer, 10) catch 1;
+    const stdin = std.io.getStdIn();
+    const reader = stdin.reader();
+
+    const result = try reader.readUntilDelimiter(&input, '\n');
+    tmp = std.fmt.parseInt(u8, result, 10) catch 1;
 
     if (tmp < 1) tmp = 1;
     if (tmp > 8) tmp = 8;
