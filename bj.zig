@@ -16,7 +16,7 @@ pub const Card = struct {
 };
 
 pub const Shoe = struct {
-    cards: []Card,
+    cards: [CARDS_PER_DECK * MAX_DECKS]Card,
     current_card: u16,
     num_cards: u16,
 };
@@ -1008,18 +1008,24 @@ pub fn ask_insurance(game: *Game) !void {
 }
 
 pub fn deal_new_hand(game: *Game) !void {
+    const cards = [_]Card{Card{ .value = 0, .suit = 0 }} ** MAX_CARDS_PER_HAND;
+
+    const hand = Hand{
+        .cards = cards,
+        .num_cards = 0,
+    };
+
     var player_hand = PlayerHand{
-        .hand = Hand{
-            .cards = [_]Card{Card{ .value = 0, .suit = 0 }} ** MAX_CARDS_PER_HAND,
-            .num_cards = 0,
-        },
+        .hand = hand,
         .bet = game.current_bet,
         .stood = false,
         .played = false,
         .paid = false,
         .status = HandStatus.Unknown,
     };
+
     var dealer_hand = &game.dealer_hand;
+
     const shoe = &game.shoe;
 
     if (need_to_shuffle(game)) {

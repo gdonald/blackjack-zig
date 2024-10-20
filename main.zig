@@ -7,10 +7,10 @@ pub fn main() !u8 {
         .suit = 0,
     };
 
-    var cards_array = [_]bj.Card{default_card} ** (bj.CARDS_PER_DECK * bj.MAX_DECKS);
+    const cards_array = [_]bj.Card{default_card} ** (bj.CARDS_PER_DECK * bj.MAX_DECKS);
     const shoe = bj.Shoe{
         .num_cards = 0,
-        .cards = &cards_array,
+        .cards = cards_array,
         .current_card = undefined,
     };
 
