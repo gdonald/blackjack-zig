@@ -59,6 +59,7 @@ pub fn main() !u8 {
     try bj.buffer_off(&stdin);
 
     try bj.load_game(&game);
+    try bj.initPrng();
 
     while (!game.quitting) {
         try bj.deal_new_hand(&game);

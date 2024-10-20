@@ -1,5 +1,7 @@
 const std = @import("std");
 
+var prng: std.rand.DefaultPrng = undefined;
+
 pub const CARDS_PER_DECK: u16 = 52;
 pub const MAX_DECKS: u16 = 8;
 pub const MAX_CARDS_PER_HAND: u8 = 11;
@@ -112,6 +114,12 @@ pub const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂠", "", "", "" },
 };
 
+pub fn initPrng() !void {
+    var seed: u64 = undefined;
+    try std.posix.getrandom(std.mem.asBytes(&seed));
+    prng = std.rand.DefaultPrng.init(seed);
+}
+
 fn get_total_cards(game: *Game) u32 {
     return game.num_decks * CARDS_PER_DECK;
 }
@@ -123,12 +131,7 @@ fn swap(a: *Card, b: *Card) void {
 }
 
 fn myrand(min: u32, max: u32) !u32 {
-    var seed: u64 = undefined;
-    try std.posix.getrandom(std.mem.asBytes(&seed));
-    var prng = std.rand.DefaultPrng.init(seed);
-    const rand = prng.random();
-
-    return rand.intRangeAtMost(u32, min, max);
+    return prng.random().intRangeAtMost(u32, min, max);
 }
 
 fn shuffle(shoe: *Shoe) !void {
