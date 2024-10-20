@@ -1,109 +1,26 @@
 const std = @import("std");
 
-var prng: std.rand.DefaultPrng = undefined;
-
-pub const CARDS_PER_DECK: u16 = 52;
-pub const MAX_DECKS: u16 = 8;
-pub const MAX_CARDS_PER_HAND: u8 = 11;
-pub const MAX_PLAYER_HANDS: u8 = 7;
-pub const MIN_BET: u32 = 500;
-pub const MAX_BET: u32 = 10000000;
-pub const SAVE_FILE: []const u8 = "bj.txt";
-
-pub const Card = struct {
-    value: u8,
-    suit: u8,
-
-    pub fn init(value: u8, suit: u8) Card {
-        return Card{ .value = value, .suit = suit };
-    }
-
-    pub fn new() Card {
-        return Card{ .value = 0, .suit = 0 };
-    }
-};
-
-pub const Shoe = struct {
-    cards: [CARDS_PER_DECK * MAX_DECKS]Card,
-    current_card: u16,
-    num_cards: u16,
-
-    pub fn init() Shoe {
-        return Shoe{
-            .num_cards = 0,
-            .cards = [_]Card{Card.new()} ** (CARDS_PER_DECK * MAX_DECKS),
-            .current_card = undefined,
-        };
-    }
-};
-
-pub const Hand = struct {
-    cards: [MAX_CARDS_PER_HAND]Card,
-    num_cards: u8,
-};
-
-pub const DealerHand = struct {
-    hand: Hand,
-    hide_down_card: bool,
-
-    pub fn init() DealerHand {
-        return DealerHand{
-            .hand = undefined,
-            .hide_down_card = true,
-        };
-    }
-};
+const CARDS_PER_DECK: u16 = 52;
+const MAX_DECKS: u16 = 8;
+const MAX_CARDS_PER_HAND: u8 = 11;
+const MAX_PLAYER_HANDS: u8 = 7;
+const MIN_BET: u32 = 500;
+const MAX_BET: u32 = 10000000;
+const SAVE_FILE: []const u8 = "bj.txt";
 
 const CountMethod = enum {
     Soft,
     Hard,
 };
 
-pub const HandStatus = enum(u8) {
+const HandStatus = enum(u8) {
     Unknown = 0,
     Won,
     Lost,
     Push,
 };
 
-pub const PlayerHand = struct {
-    hand: Hand,
-    bet: u32,
-    stood: bool,
-    played: bool,
-    paid: bool,
-    status: HandStatus,
-
-    pub fn init() PlayerHand {
-        return PlayerHand{
-            .hand = undefined,
-            .bet = 0,
-            .stood = false,
-            .played = false,
-            .paid = false,
-            .status = HandStatus.Won,
-        };
-    }
-};
-
-pub const Game = struct {
-    shoe: Shoe,
-    dealer_hand: DealerHand,
-    player_hands: [MAX_PLAYER_HANDS]PlayerHand,
-    num_decks: u8,
-    deck_type: u8,
-    face_type: u8,
-    money: u128,
-    current_bet: u32,
-    current_player_hand: u8,
-    total_player_hands: u8,
-    quitting: bool,
-    shuffle_specs: *const [8][2]u8,
-    faces: *const [14][4][]const u8,
-    faces2: *const [14][4][]const u8,
-};
-
-pub const shuffle_specs: [8][2]u8 = [8][2]u8{
+const shuffle_specs: [8][2]u8 = [8][2]u8{
     [2]u8{ 95, 8 },
     [2]u8{ 92, 7 },
     [2]u8{ 89, 6 },
@@ -114,7 +31,7 @@ pub const shuffle_specs: [8][2]u8 = [8][2]u8{
     [2]u8{ 80, 1 },
 };
 
-pub const faces: [14][4][]const u8 = [14][4][]const u8{
+const faces: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "A♠", "A♥", "A♣", "A♦" },
     [4][]const u8{ "2♠", "2♥", "2♣", "2♦" },
     [4][]const u8{ "3♠", "3♥", "3♣", "3♦" },
@@ -131,7 +48,7 @@ pub const faces: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "??", "", "", "" },
 };
 
-pub const faces2: [14][4][]const u8 = [14][4][]const u8{
+const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂡", "🂱", "🃁", "🃑" },
     [4][]const u8{ "🂢", "🂲", "🃂", "🃒" },
     [4][]const u8{ "🂣", "🂳", "🃃", "🃓" },
@@ -148,10 +65,140 @@ pub const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂠", "", "", "" },
 };
 
-pub fn initPrng() !void {
+const Card = struct {
+    value: u8,
+    suit: u8,
+
+    fn init(value: u8, suit: u8) Card {
+        return Card{ .value = value, .suit = suit };
+    }
+
+    fn new() Card {
+        return Card{ .value = 0, .suit = 0 };
+    }
+};
+
+const Shoe = struct {
+    cards: [CARDS_PER_DECK * MAX_DECKS]Card,
+    current_card: u16,
+    num_cards: u16,
+
+    fn init() Shoe {
+        return Shoe{
+            .num_cards = 0,
+            .cards = [_]Card{Card.new()} ** (CARDS_PER_DECK * MAX_DECKS),
+            .current_card = undefined,
+        };
+    }
+};
+
+const Hand = struct {
+    cards: [MAX_CARDS_PER_HAND]Card,
+    num_cards: u8,
+};
+
+const DealerHand = struct {
+    hand: Hand,
+    hide_down_card: bool,
+
+    fn init() DealerHand {
+        return DealerHand{
+            .hand = undefined,
+            .hide_down_card = true,
+        };
+    }
+};
+
+const PlayerHand = struct {
+    hand: Hand,
+    bet: u32,
+    stood: bool,
+    played: bool,
+    paid: bool,
+    status: HandStatus,
+
+    fn init() PlayerHand {
+        return PlayerHand{
+            .hand = undefined,
+            .bet = 0,
+            .stood = false,
+            .played = false,
+            .paid = false,
+            .status = HandStatus.Won,
+        };
+    }
+};
+
+pub const Game = struct {
+    prng: std.rand.DefaultPrng,
+    shoe: Shoe,
+    dealer_hand: DealerHand,
+    player_hands: [MAX_PLAYER_HANDS]PlayerHand,
+    num_decks: u8,
+    deck_type: u8,
+    face_type: u8,
+    money: u128,
+    current_bet: u32,
+    current_player_hand: u8,
+    total_player_hands: u8,
+    quitting: bool,
+    shuffle_specs: *const [8][2]u8,
+    faces: *const [14][4][]const u8,
+    faces2: *const [14][4][]const u8,
+
+    pub fn init() Game {
+        const shoe = Shoe.init();
+        const dealer_hand = DealerHand.init();
+        const player_hand = PlayerHand.init();
+
+        const player_hands = [MAX_PLAYER_HANDS]PlayerHand{
+            player_hand,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        };
+
+        return Game{
+            .prng = undefined,
+            .shoe = shoe,
+            .dealer_hand = dealer_hand,
+            .player_hands = player_hands,
+            .num_decks = 1,
+            .deck_type = 0,
+            .face_type = 0,
+            .money = 10000,
+            .current_bet = 500,
+            .current_player_hand = 0,
+            .total_player_hands = 0,
+            .quitting = false,
+            .shuffle_specs = &shuffle_specs,
+            .faces = &faces,
+            .faces2 = &faces2,
+        };
+    }
+};
+
+pub fn run_game(game: *Game) !void {
+    try init_prng(game);
+    try load_game(game);
+
+    const stdin = std.io.getStdIn();
+    try buffer_off(&stdin);
+
+    while (!game.quitting) {
+        try deal_new_hand(game);
+    }
+
+    try buffer_on(&stdin);
+}
+
+fn init_prng(game: *Game) !void {
     var seed: u64 = undefined;
     try std.posix.getrandom(std.mem.asBytes(&seed));
-    prng = std.rand.DefaultPrng.init(seed);
+    game.prng = std.rand.DefaultPrng.init(seed);
 }
 
 fn get_total_cards(game: *Game) u32 {
@@ -164,22 +211,22 @@ fn swap(a: *Card, b: *Card) void {
     b.* = tmp;
 }
 
-fn myrand(min: u32, max: u32) !u32 {
-    return prng.random().intRangeAtMost(u32, min, max);
+fn myrand(game: *Game, min: u32, max: u32) !u32 {
+    return game.prng.random().intRangeAtMost(u32, min, max);
 }
 
-fn shuffle(shoe: *Shoe) !void {
+fn shuffle(game: *Game) !void {
     for (0..7) |_| {
-        var i = shoe.num_cards - 1;
+        var i = game.shoe.num_cards - 1;
         while (i > 0) : (i -= 1) {
-            const rand_idx = try myrand(0, shoe.num_cards - 1);
-            swap(&shoe.cards[i], &shoe.cards[rand_idx]);
+            const rand_idx = try myrand(game, 0, game.shoe.num_cards - 1);
+            swap(&game.shoe.cards[i], &game.shoe.cards[rand_idx]);
         }
     }
-    shoe.current_card = 0;
+    game.shoe.current_card = 0;
 }
 
-pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
+fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
     const total_cards = get_total_cards(game);
     game.shoe.num_cards = 0;
     const suites: [4]u8 = [4]u8{ 0, 1, 2, 3 };
@@ -202,10 +249,10 @@ pub fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
         }
     }
 
-    try shuffle(&game.shoe);
+    try shuffle(game);
 }
 
-pub fn need_to_shuffle(game: *const Game) bool {
+fn need_to_shuffle(game: *const Game) bool {
     if (game.shoe.num_cards == 0) {
         return true;
     }
@@ -224,37 +271,37 @@ pub fn need_to_shuffle(game: *const Game) bool {
     return false;
 }
 
-pub fn new_regular(game: *Game) !void {
+fn new_regular(game: *Game) !void {
     const values = [13]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
     try new_shoe(game, &values, 13);
 }
 
-pub fn new_aces(game: *Game) !void {
+fn new_aces(game: *Game) !void {
     const values: [1]u8 = [1]u8{0};
     try new_shoe(game, &values, 1);
 }
 
-pub fn new_jacks(game: *Game) !void {
+fn new_jacks(game: *Game) !void {
     const values: [1]u8 = [1]u8{10};
     try new_shoe(game, &values, 1);
 }
 
-pub fn new_aces_jacks(game: *Game) !void {
+fn new_aces_jacks(game: *Game) !void {
     const values: [2]u8 = [2]u8{ 0, 10 };
     try new_shoe(game, &values, 2);
 }
 
-pub fn new_sevens(game: *Game) !void {
+fn new_sevens(game: *Game) !void {
     const values: [1]u8 = [1]u8{6};
     try new_shoe(game, &values, 1);
 }
 
-pub fn new_eights(game: *Game) !void {
+fn new_eights(game: *Game) !void {
     const values: [1]u8 = [1]u8{7};
     try new_shoe(game, &values, 1);
 }
 
-pub fn build_new_shoe(game: *Game) !void {
+fn build_new_shoe(game: *Game) !void {
     switch (game.deck_type) {
         2 => {
             try new_aces(game);
@@ -277,25 +324,25 @@ pub fn build_new_shoe(game: *Game) !void {
     }
 }
 
-pub fn deal_card(shoe: *Shoe, hand: *Hand) void {
+fn deal_card(shoe: *Shoe, hand: *Hand) void {
     hand.cards[hand.num_cards] = shoe.cards[shoe.current_card];
     hand.num_cards += 1;
     shoe.current_card += 1;
 }
 
-pub fn is_ace(card: *const Card) bool {
+fn is_ace(card: *const Card) bool {
     return card.value == 0;
 }
 
-pub fn is_ten(card: *const Card) bool {
+fn is_ten(card: *const Card) bool {
     return card.value > 8;
 }
 
-pub fn dealer_upcard_is_ace(dealer_hand: *const DealerHand) bool {
+fn dealer_upcard_is_ace(dealer_hand: *const DealerHand) bool {
     return is_ace(&dealer_hand.hand.cards[0]);
 }
 
-pub fn is_blackjack(hand: *const Hand) bool {
+fn is_blackjack(hand: *const Hand) bool {
     if (hand.num_cards != 2) {
         return false;
     }
@@ -307,14 +354,14 @@ pub fn is_blackjack(hand: *const Hand) bool {
     return is_ace(&hand.cards[1]) and is_ten(&hand.cards[0]);
 }
 
-pub fn get_card_face(game: *const Game, value: u8, suit: u8) []const u8 {
+fn get_card_face(game: *const Game, value: u8, suit: u8) []const u8 {
     if (game.face_type == 2) {
         return game.faces2[value][suit];
     }
     return game.faces[value][suit];
 }
 
-pub fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32 {
+fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32 {
     var v: u32 = 0;
     var total: u32 = 0;
     var tmp_v: u32 = 0;
@@ -341,7 +388,7 @@ pub fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32
     return total;
 }
 
-pub fn draw_dealer_hand(game: *const Game) void {
+fn draw_dealer_hand(game: *const Game) void {
     const dealer_hand = &game.dealer_hand;
     var card: *const Card = undefined;
 
@@ -359,7 +406,7 @@ pub fn draw_dealer_hand(game: *const Game) void {
     std.debug.print(" ⇒  {d}\n", .{dealer_get_value(dealer_hand, .Soft)});
 }
 
-pub fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
+fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
     var total: u32 = 0;
 
     for (0..player_hand.hand.num_cards) |x| {
@@ -380,11 +427,11 @@ pub fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32
     return total;
 }
 
-pub fn player_is_busted(player_hand: *const PlayerHand) bool {
+fn player_is_busted(player_hand: *const PlayerHand) bool {
     return player_get_value(player_hand, .Soft) > 21;
 }
 
-pub fn player_draw_hand(game: *const Game, index: usize) void {
+fn player_draw_hand(game: *const Game, index: usize) void {
     const player_hand = &game.player_hands[index];
 
     std.debug.print(" ", .{});
@@ -421,11 +468,11 @@ pub fn player_draw_hand(game: *const Game, index: usize) void {
     std.debug.print("\n\n", .{});
 }
 
-pub fn clear() void {
+fn clear() void {
     std.debug.print("\x1b[2J\x1b[H", .{});
 }
 
-pub fn draw_hands(game: *const Game) void {
+fn draw_hands(game: *const Game) void {
     clear();
     std.debug.print("\n Dealer: \n", .{});
     draw_dealer_hand(game);
@@ -438,7 +485,7 @@ pub fn draw_hands(game: *const Game) void {
     }
 }
 
-pub fn player_can_hit(player_hand: *const PlayerHand) bool {
+fn player_can_hit(player_hand: *const PlayerHand) bool {
     return !player_hand.played and
         !player_hand.stood and
         player_get_value(player_hand, .Hard) != 21 and
@@ -446,13 +493,13 @@ pub fn player_can_hit(player_hand: *const PlayerHand) bool {
         !player_is_busted(player_hand);
 }
 
-pub fn player_can_stand(player_hand: *const PlayerHand) bool {
+fn player_can_stand(player_hand: *const PlayerHand) bool {
     return !player_hand.stood and
         !player_is_busted(player_hand) and
         !is_blackjack(&player_hand.hand);
 }
 
-pub fn all_bets(game: *const Game) u32 {
+fn all_bets(game: *const Game) u32 {
     var bets: u32 = 0;
 
     for (game.player_hands[0..game.total_player_hands]) |player_hand| {
@@ -462,7 +509,7 @@ pub fn all_bets(game: *const Game) u32 {
     return bets;
 }
 
-pub fn player_can_split(game: *const Game) bool {
+fn player_can_split(game: *const Game) bool {
     const player_hand = &game.player_hands[game.current_player_hand];
 
     if (player_hand.stood or game.total_player_hands >= MAX_PLAYER_HANDS) {
@@ -477,7 +524,7 @@ pub fn player_can_split(game: *const Game) bool {
         player_hand.hand.cards[0].value == player_hand.hand.cards[1].value;
 }
 
-pub fn player_can_dbl(game: *const Game) bool {
+fn player_can_dbl(game: *const Game) bool {
     const player_hand = &game.player_hands[game.current_player_hand];
 
     if (game.money < all_bets(game) + player_hand.bet) {
@@ -495,7 +542,7 @@ pub fn player_can_dbl(game: *const Game) bool {
     return true;
 }
 
-pub fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
+fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
     if (player_hand.played or
         player_hand.stood or
         is_blackjack(&player_hand.hand) or
@@ -517,11 +564,11 @@ pub fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
     return false;
 }
 
-pub fn more_hands_to_play(game: *const Game) bool {
+fn more_hands_to_play(game: *const Game) bool {
     return game.current_player_hand < game.total_player_hands - 1;
 }
 
-pub fn play_more_hands(game: *Game) anyerror!void {
+fn play_more_hands(game: *Game) anyerror!void {
     game.current_player_hand += 1;
     var player_hand = &game.player_hands[game.current_player_hand];
     deal_card(&game.shoe, &player_hand.hand);
@@ -535,7 +582,7 @@ pub fn play_more_hands(game: *Game) anyerror!void {
     try player_get_action(game);
 }
 
-pub fn need_to_play_dealer_hand(game: *const Game) bool {
+fn need_to_play_dealer_hand(game: *const Game) bool {
     for (game.player_hands[0..game.total_player_hands]) |player_hand| {
         if (!(player_is_busted(&player_hand) or
             is_blackjack(&player_hand.hand)))
@@ -547,11 +594,11 @@ pub fn need_to_play_dealer_hand(game: *const Game) bool {
     return false;
 }
 
-pub fn dealer_is_busted(dealer_hand: *const DealerHand) bool {
+fn dealer_is_busted(dealer_hand: *const DealerHand) bool {
     return dealer_get_value(dealer_hand, .Soft) > 21;
 }
 
-pub fn normalize_bet(game: *Game) void {
+fn normalize_bet(game: *Game) void {
     if (game.current_bet < MIN_BET) {
         game.current_bet = MIN_BET;
     } else if (game.current_bet > MAX_BET) {
@@ -563,7 +610,7 @@ pub fn normalize_bet(game: *Game) void {
     }
 }
 
-pub fn save_game(game: *const Game) !void {
+fn save_game(game: *const Game) !void {
     const dir = std.fs.cwd();
 
     _ = try dir.createFile(SAVE_FILE, .{});
@@ -583,7 +630,7 @@ pub fn save_game(game: *const Game) !void {
     try fw.writeAll(buffer[0..writer.len]);
 }
 
-pub fn load_game(game: *Game) !void {
+fn load_game(game: *Game) !void {
     const file: std.fs.File = std.fs.cwd().openFile(SAVE_FILE, .{}) catch {
         return;
     };
@@ -612,7 +659,7 @@ fn read_u32_from_file(file: std.fs.File, buffer: *[32]u8) !u32 {
     return std.fmt.parseInt(u32, line_slice, 10) catch 0;
 }
 
-pub fn pay_hands(game: *Game) !void {
+fn pay_hands(game: *Game) !void {
     const dealer_hand = &game.dealer_hand;
     var player_hand: *PlayerHand = undefined;
     const dhv = dealer_get_value(dealer_hand, .Soft);
@@ -648,7 +695,7 @@ pub fn pay_hands(game: *Game) !void {
     try save_game(game);
 }
 
-pub fn play_dealer_hand(game: *Game) !void {
+fn play_dealer_hand(game: *Game) !void {
     var dealer_hand = &game.dealer_hand;
     var soft_count: u32 = 0;
     var hard_count: u32 = 0;
@@ -676,7 +723,7 @@ pub fn play_dealer_hand(game: *Game) !void {
     try pay_hands(game);
 }
 
-pub fn get_new_bet(game: *Game) !void {
+fn get_new_bet(game: *Game) !void {
     clear();
     draw_hands(game);
 
@@ -692,7 +739,7 @@ pub fn get_new_bet(game: *Game) !void {
     try deal_new_hand(game);
 }
 
-pub fn get_new_num_decks(game: *Game) anyerror!void {
+fn get_new_num_decks(game: *Game) anyerror!void {
     clear();
     draw_hands(game);
 
@@ -710,7 +757,7 @@ pub fn get_new_num_decks(game: *Game) anyerror!void {
     try game_options(game);
 }
 
-pub fn get_new_deck_type(game: *Game) !void {
+fn get_new_deck_type(game: *Game) !void {
     clear();
     draw_hands(game);
     std.debug.print(" (1) Regular  (2) Aces  (3) Jacks  (4) Aces & Jacks  (5) Sevens  (6) Eights\n", .{});
@@ -744,7 +791,7 @@ pub fn get_new_deck_type(game: *Game) !void {
     }
 }
 
-pub fn get_new_face_type(game: *Game) !void {
+fn get_new_face_type(game: *Game) !void {
     clear();
     draw_hands(game);
     std.debug.print(" (1) A♠  (2) 🂡\n", .{});
@@ -774,7 +821,7 @@ pub fn get_new_face_type(game: *Game) !void {
     }
 }
 
-pub fn game_options(game: *Game) !void {
+fn game_options(game: *Game) !void {
     clear();
     draw_hands(game);
     std.debug.print(" (N) Number of Decks  (T) Deck Type  (F) Face Type  (B) Back\n", .{});
@@ -807,7 +854,7 @@ pub fn game_options(game: *Game) !void {
     }
 }
 
-pub fn bet_options(game: *Game) anyerror!void {
+fn bet_options(game: *Game) anyerror!void {
     std.debug.print(" (D) Deal Hand  (B) Change Bet  (O) Options  (Q) Quit\n", .{});
 
     var stdin = std.io.getStdIn();
@@ -836,7 +883,7 @@ pub fn bet_options(game: *Game) anyerror!void {
     }
 }
 
-pub fn process(game: *Game) !void {
+fn process(game: *Game) !void {
     if (more_hands_to_play(game)) {
         try play_more_hands(game);
         return;
@@ -847,7 +894,7 @@ pub fn process(game: *Game) !void {
     try bet_options(game);
 }
 
-pub fn player_hit(game: *Game) anyerror!void {
+fn player_hit(game: *Game) anyerror!void {
     var player_hand = &game.player_hands[game.current_player_hand];
     deal_card(&game.shoe, &player_hand.hand);
 
@@ -860,7 +907,7 @@ pub fn player_hit(game: *Game) anyerror!void {
     try player_get_action(game);
 }
 
-pub fn player_stand(game: *Game) !void {
+fn player_stand(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     player_hand.stood = true;
@@ -876,7 +923,7 @@ pub fn player_stand(game: *Game) !void {
     try bet_options(game);
 }
 
-pub fn player_split(game: *Game) !void {
+fn player_split(game: *Game) !void {
     const new_hand = PlayerHand{
         .bet = game.current_bet,
         .hand = Hand{
@@ -926,7 +973,7 @@ pub fn player_split(game: *Game) !void {
     try player_get_action(game);
 }
 
-pub fn player_dbl(game: *Game) !void {
+fn player_dbl(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     deal_card(&game.shoe, &player_hand.hand);
@@ -938,7 +985,7 @@ pub fn player_dbl(game: *Game) !void {
     }
 }
 
-pub fn player_get_action(game: *Game) anyerror!void {
+fn player_get_action(game: *Game) anyerror!void {
     const player_hand = &game.player_hands[game.current_player_hand];
     std.debug.print(" ", .{});
 
@@ -972,7 +1019,7 @@ pub fn player_get_action(game: *Game) anyerror!void {
     }
 }
 
-pub fn insure_hand(game: *Game) !void {
+fn insure_hand(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     player_hand.bet /= 2;
@@ -985,7 +1032,7 @@ pub fn insure_hand(game: *Game) !void {
     try bet_options(game);
 }
 
-pub fn no_insurance(game: *Game) !void {
+fn no_insurance(game: *Game) !void {
     var dealer_hand = &game.dealer_hand;
     var player_hand: *PlayerHand = undefined;
 
@@ -1010,7 +1057,7 @@ pub fn no_insurance(game: *Game) !void {
     try player_get_action(game);
 }
 
-pub fn ask_insurance(game: *Game) !void {
+fn ask_insurance(game: *Game) !void {
     std.debug.print(" Insurance?  (Y) Yes  (N) No\n", .{});
 
     var stdin = std.io.getStdIn();
@@ -1041,7 +1088,7 @@ pub fn ask_insurance(game: *Game) !void {
     }
 }
 
-pub fn deal_new_hand(game: *Game) !void {
+fn deal_new_hand(game: *Game) !void {
     const cards = [_]Card{Card{ .value = 0, .suit = 0 }} ** MAX_CARDS_PER_HAND;
 
     const hand = Hand{
@@ -1097,12 +1144,12 @@ pub fn deal_new_hand(game: *Game) !void {
     try save_game(game);
 }
 
-pub fn buffer_on(stdin: *const std.fs.File) !void {
+fn buffer_on(stdin: *const std.fs.File) !void {
     const term = try std.posix.tcgetattr(stdin.handle);
     try std.posix.tcsetattr(stdin.handle, .NOW, term);
 }
 
-pub fn buffer_off(stdin: *const std.fs.File) !void {
+fn buffer_off(stdin: *const std.fs.File) !void {
     var term = try std.posix.tcgetattr(stdin.handle);
     term.lflag.ICANON = false;
     try std.posix.tcsetattr(stdin.handle, .NOW, term);
