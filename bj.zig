@@ -13,12 +13,28 @@ pub const SAVE_FILE: []const u8 = "bj.txt";
 pub const Card = struct {
     value: u8,
     suit: u8,
+
+    pub fn init(value: u8, suit: u8) Card {
+        return Card{ .value = value, .suit = suit };
+    }
+
+    pub fn new() Card {
+        return Card{ .value = 0, .suit = 0 };
+    }
 };
 
 pub const Shoe = struct {
     cards: [CARDS_PER_DECK * MAX_DECKS]Card,
     current_card: u16,
     num_cards: u16,
+
+    pub fn init() Shoe {
+        return Shoe{
+            .num_cards = 0,
+            .cards = [_]Card{Card.new()} ** (CARDS_PER_DECK * MAX_DECKS),
+            .current_card = undefined,
+        };
+    }
 };
 
 pub const Hand = struct {
@@ -29,6 +45,13 @@ pub const Hand = struct {
 pub const DealerHand = struct {
     hand: Hand,
     hide_down_card: bool,
+
+    pub fn init() DealerHand {
+        return DealerHand{
+            .hand = undefined,
+            .hide_down_card = true,
+        };
+    }
 };
 
 const CountMethod = enum {
@@ -50,6 +73,17 @@ pub const PlayerHand = struct {
     played: bool,
     paid: bool,
     status: HandStatus,
+
+    pub fn init() PlayerHand {
+        return PlayerHand{
+            .hand = undefined,
+            .bet = 0,
+            .stood = false,
+            .played = false,
+            .paid = false,
+            .status = HandStatus.Won,
+        };
+    }
 };
 
 pub const Game = struct {

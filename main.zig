@@ -2,31 +2,11 @@ const std = @import("std");
 const bj = @import("bj.zig");
 
 pub fn main() !u8 {
-    const default_card = bj.Card{
-        .value = 0,
-        .suit = 0,
-    };
+    try bj.initPrng();
 
-    const cards_array = [_]bj.Card{default_card} ** (bj.CARDS_PER_DECK * bj.MAX_DECKS);
-    const shoe = bj.Shoe{
-        .num_cards = 0,
-        .cards = cards_array,
-        .current_card = undefined,
-    };
-
-    const dealer_hand = bj.DealerHand{
-        .hand = undefined,
-        .hide_down_card = true,
-    };
-
-    const player_hand = bj.PlayerHand{
-        .hand = undefined,
-        .bet = 0,
-        .stood = false,
-        .played = false,
-        .paid = false,
-        .status = bj.HandStatus.Won,
-    };
+    const shoe = bj.Shoe.init();
+    const dealer_hand = bj.DealerHand.init();
+    const player_hand = bj.PlayerHand.init();
 
     const player_hands = [bj.MAX_PLAYER_HANDS]bj.PlayerHand{
         player_hand,
@@ -55,11 +35,10 @@ pub fn main() !u8 {
         .faces2 = &bj.faces2,
     };
 
+    try bj.load_game(&game);
+
     const stdin = std.io.getStdIn();
     try bj.buffer_off(&stdin);
-
-    try bj.load_game(&game);
-    try bj.initPrng();
 
     while (!game.quitting) {
         try bj.deal_new_hand(&game);
