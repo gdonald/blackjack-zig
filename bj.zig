@@ -130,7 +130,7 @@ const PlayerHand = struct {
 };
 
 pub const Game = struct {
-    prng: std.rand.DefaultPrng,
+    prng: std.Random.DefaultPrng,
     shoe: Shoe,
     dealer_hand: DealerHand,
     player_hands: [MAX_PLAYER_HANDS]PlayerHand,
@@ -185,7 +185,7 @@ pub fn run_game(game: *Game) !void {
     try init_prng(game);
     try load_game(game);
 
-    const stdin = std.io.getStdIn();
+    const stdin = std.fs.File.stdin();
     try buffer_off(&stdin);
 
     while (!game.quitting) {
@@ -198,7 +198,7 @@ pub fn run_game(game: *Game) !void {
 fn init_prng(game: *Game) !void {
     var seed: u64 = undefined;
     try std.posix.getrandom(std.mem.asBytes(&seed));
-    game.prng = std.rand.DefaultPrng.init(seed);
+    game.prng = std.Random.DefaultPrng.init(seed);
 }
 
 fn get_total_cards(game: *Game) u32 {
@@ -613,12 +613,11 @@ fn normalize_bet(game: *Game) void {
 fn save_game(game: *const Game) !void {
     const dir = std.fs.cwd();
 
-    _ = try dir.createFile(SAVE_FILE, .{});
-    var file = dir.openFile(SAVE_FILE, .{ .mode = .write_only }) catch return;
+    var file = try dir.createFile(SAVE_FILE, .{});
     defer file.close();
 
     var buffer: [128]u8 = undefined;
-    const writer = std.fmt.bufPrint(&buffer, "{d}\n{d}\n{d}\n{d}\n{d}\n", .{
+    const formatted = std.fmt.bufPrint(&buffer, "{d}\n{d}\n{d}\n{d}\n{d}\n", .{
         game.num_decks,
         game.money,
         game.current_bet,
@@ -626,8 +625,7 @@ fn save_game(game: *const Game) !void {
         game.face_type,
     }) catch return error.BufferOverflow;
 
-    var fw = file.writer();
-    try fw.writeAll(buffer[0..writer.len]);
+    _ = try file.writeAll(formatted);
 }
 
 fn load_game(game: *Game) !void {
@@ -636,27 +634,34 @@ fn load_game(game: *Game) !void {
     };
     defer file.close();
 
-    var buffer: [32]u8 = undefined;
+    var file_buffer: [256]u8 = undefined;
+    const bytes_read = file.readAll(&file_buffer) catch return;
 
-    const num_decks = try read_u32_from_file(file, &buffer);
-    const money = try read_u32_from_file(file, &buffer);
-    const current_bet = try read_u32_from_file(file, &buffer);
-    const deck_type = try read_u32_from_file(file, &buffer);
-    const face_type = try read_u32_from_file(file, &buffer);
+    if (bytes_read == 0) return;
 
-    game.num_decks = @truncate(num_decks);
-    game.money = money;
-    game.current_bet = current_bet;
-    game.deck_type = @truncate(deck_type);
-    game.face_type = @truncate(face_type);
-}
+    var line_start: usize = 0;
+    var line_num: usize = 0;
+    var values: [5]u32 = undefined;
 
-fn read_u32_from_file(file: std.fs.File, buffer: *[32]u8) !u32 {
-    const reader = file.reader();
-    const line = try reader.readUntilDelimiterOrEof(buffer[0..], '\n');
-    const line_slice = line orelse return error.InvalidData;
+    for (0..bytes_read) |i| {
+        if (file_buffer[i] == '\n' or i == bytes_read - 1) {
+            const end = if (file_buffer[i] == '\n') i else i + 1;
+            if (end > line_start) {
+                values[line_num] = std.fmt.parseInt(u32, file_buffer[line_start..end], 10) catch 0;
+                line_num += 1;
+                if (line_num >= 5) break;
+            }
+            line_start = i + 1;
+        }
+    }
 
-    return std.fmt.parseInt(u32, line_slice, 10) catch 0;
+    if (line_num >= 5) {
+        game.num_decks = @truncate(values[0]);
+        game.money = values[1];
+        game.current_bet = values[2];
+        game.deck_type = @truncate(values[3]);
+        game.face_type = @truncate(values[4]);
+    }
 }
 
 fn pay_hands(game: *Game) !void {
@@ -723,6 +728,22 @@ fn play_dealer_hand(game: *Game) !void {
     try pay_hands(game);
 }
 
+fn read_line(buffer: []u8) ![]u8 {
+    const stdin = std.fs.File.stdin();
+    var idx: usize = 0;
+
+    while (idx < buffer.len) {
+        var byte: [1]u8 = undefined;
+        const n = stdin.read(&byte) catch break;
+        if (n == 0) break;
+        if (byte[0] == '\n') break;
+        buffer[idx] = byte[0];
+        idx += 1;
+    }
+
+    return buffer[0..idx];
+}
+
 fn get_new_bet(game: *Game) !void {
     clear();
     draw_hands(game);
@@ -730,7 +751,7 @@ fn get_new_bet(game: *Game) !void {
     std.debug.print(" Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
 
     var input: [32]u8 = undefined;
-    const result = try std.io.getStdIn().reader().readUntilDelimiter(&input, '\n');
+    const result = try read_line(&input);
     const tmp = std.fmt.parseInt(u32, result, 10) catch 0;
 
     game.current_bet = tmp * 100;
@@ -746,7 +767,7 @@ fn get_new_num_decks(game: *Game) anyerror!void {
     std.debug.print(" Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
 
     var input: [8]u8 = undefined;
-    const result = try std.io.getStdIn().reader().readUntilDelimiter(&input, '\n');
+    const result = try read_line(&input);
     var tmp = std.fmt.parseInt(u8, result, 10) catch 1;
 
     if (tmp < 1) tmp = 1;
@@ -762,7 +783,7 @@ fn get_new_deck_type(game: *Game) !void {
     draw_hands(game);
     std.debug.print(" (1) Regular  (2) Aces  (3) Jacks  (4) Aces & Jacks  (5) Sevens  (6) Eights\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
@@ -796,7 +817,7 @@ fn get_new_face_type(game: *Game) !void {
     draw_hands(game);
     std.debug.print(" (1) A♠  (2) 🂡\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
@@ -826,7 +847,7 @@ fn game_options(game: *Game) !void {
     draw_hands(game);
     std.debug.print(" (N) Number of Decks  (T) Deck Type  (F) Face Type  (B) Back\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
@@ -857,7 +878,7 @@ fn game_options(game: *Game) !void {
 fn bet_options(game: *Game) anyerror!void {
     std.debug.print(" (D) Deal Hand  (B) Change Bet  (O) Options  (Q) Quit\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
@@ -996,10 +1017,14 @@ fn player_get_action(game: *Game) anyerror!void {
 
     std.debug.print("\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
+    var reader = stdin.readerStreaming(&.{});
 
     while (true) {
-        const result = stdin.reader().readByte() catch return;
+        var byte_buf: [1]u8 = undefined;
+        var buffers = [_][]u8{&byte_buf};
+        _ = reader.interface.readVec(&buffers) catch return;
+        const result = byte_buf[0];
         if (result == 0) continue;
 
         switch (result | 0x20) {
@@ -1060,7 +1085,7 @@ fn no_insurance(game: *Game) !void {
 fn ask_insurance(game: *Game) !void {
     std.debug.print(" Insurance?  (Y) Yes  (N) No\n", .{});
 
-    var stdin = std.io.getStdIn();
+    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
