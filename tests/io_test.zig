@@ -214,6 +214,7 @@ test "get_new_bet reads a typed amount then deals and stands to quit" {
     ctx.game.money = 1000000;
     ctx.game.num_decks = 8;
     set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_table(&ctx.game);
 
     try bj.get_new_bet(&ctx.game);
     try testing.expectEqual(@as(u32, 100000), ctx.game.current_bet);
@@ -227,6 +228,7 @@ test "get_new_bet clamps a non numeric amount to the minimum" {
     ctx.game.money = 1000000;
     ctx.game.num_decks = 8;
     set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_table(&ctx.game);
 
     try bj.get_new_bet(&ctx.game);
     try testing.expectEqual(bj.MIN_BET, ctx.game.current_bet);
