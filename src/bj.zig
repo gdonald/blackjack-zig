@@ -4,16 +4,16 @@ const CARDS_PER_DECK: u16 = 52;
 const MAX_DECKS: u16 = 8;
 const MAX_CARDS_PER_HAND: u8 = 11;
 const MAX_PLAYER_HANDS: u8 = 7;
-const MIN_BET: u32 = 500;
-const MAX_BET: u32 = 10000000;
+pub const MIN_BET: u32 = 500;
+pub const MAX_BET: u32 = 10000000;
 const SAVE_FILE: []const u8 = "bj.txt";
 
-const CountMethod = enum {
+pub const CountMethod = enum {
     Soft,
     Hard,
 };
 
-const HandStatus = enum(u8) {
+pub const HandStatus = enum(u8) {
     Unknown = 0,
     Won,
     Lost,
@@ -65,7 +65,7 @@ const faces2: [14][4][]const u8 = [14][4][]const u8{
     [4][]const u8{ "🂠", "", "", "" },
 };
 
-const Card = struct {
+pub const Card = struct {
     value: u8,
     suit: u8,
 
@@ -92,16 +92,16 @@ const Shoe = struct {
     }
 };
 
-const Hand = struct {
+pub const Hand = struct {
     cards: [MAX_CARDS_PER_HAND]Card,
     num_cards: u8,
 };
 
-const DealerHand = struct {
+pub const DealerHand = struct {
     hand: Hand,
     hide_down_card: bool,
 
-    fn init() DealerHand {
+    pub fn init() DealerHand {
         return DealerHand{
             .hand = undefined,
             .hide_down_card = true,
@@ -109,7 +109,7 @@ const DealerHand = struct {
     }
 };
 
-const PlayerHand = struct {
+pub const PlayerHand = struct {
     hand: Hand,
     bet: u32,
     stood: bool,
@@ -117,7 +117,7 @@ const PlayerHand = struct {
     paid: bool,
     status: HandStatus,
 
-    fn init() PlayerHand {
+    pub fn init() PlayerHand {
         return PlayerHand{
             .hand = undefined,
             .bet = 0,
@@ -130,6 +130,11 @@ const PlayerHand = struct {
 };
 
 pub const Game = struct {
+    io: std.Io,
+    in: *std.Io.Reader,
+    out: *std.Io.Writer,
+    raw_tty: ?std.Io.File,
+    eof: bool,
     prng: std.Random.DefaultPrng,
     shoe: Shoe,
     dealer_hand: DealerHand,
@@ -162,6 +167,11 @@ pub const Game = struct {
         };
 
         return Game{
+            .io = undefined,
+            .in = undefined,
+            .out = undefined,
+            .raw_tty = null,
+            .eof = false,
             .prng = undefined,
             .shoe = shoe,
             .dealer_hand = dealer_hand,
@@ -182,26 +192,38 @@ pub const Game = struct {
 };
 
 pub fn run_game(game: *Game) !void {
-    try init_prng(game);
+    init_prng(game);
     try load_game(game);
 
-    const stdin = std.fs.File.stdin();
-    try buffer_off(&stdin);
+    if (game.raw_tty) |tty| try buffer_off(&tty);
 
-    while (!game.quitting) {
+    while (!game.quitting and !game.eof) {
         try deal_new_hand(game);
     }
 
-    try buffer_on(&stdin);
+    if (game.raw_tty) |tty| try buffer_on(&tty);
+    game.out.flush() catch {};
 }
 
-fn init_prng(game: *Game) !void {
+pub fn init_prng(game: *Game) void {
     var seed: u64 = undefined;
-    try std.posix.getrandom(std.mem.asBytes(&seed));
+    game.io.random(std.mem.asBytes(&seed));
     game.prng = std.Random.DefaultPrng.init(seed);
 }
 
-fn get_total_cards(game: *Game) u32 {
+fn print(game: *const Game, comptime fmt: []const u8, args: anytype) void {
+    game.out.print(fmt, args) catch {};
+}
+
+fn read_byte(game: *Game) ?u8 {
+    game.out.flush() catch {};
+    return game.in.takeByte() catch {
+        game.eof = true;
+        return null;
+    };
+}
+
+pub fn get_total_cards(game: *Game) u32 {
     return game.num_decks * CARDS_PER_DECK;
 }
 
@@ -252,7 +274,7 @@ fn new_shoe(game: *Game, values: []const u8, values_count: u32) !void {
     try shuffle(game);
 }
 
-fn need_to_shuffle(game: *const Game) bool {
+pub fn need_to_shuffle(game: *const Game) bool {
     if (game.shoe.num_cards == 0) {
         return true;
     }
@@ -301,7 +323,7 @@ fn new_eights(game: *Game) !void {
     try new_shoe(game, &values, 1);
 }
 
-fn build_new_shoe(game: *Game) !void {
+pub fn build_new_shoe(game: *Game) !void {
     switch (game.deck_type) {
         2 => {
             try new_aces(game);
@@ -324,25 +346,25 @@ fn build_new_shoe(game: *Game) !void {
     }
 }
 
-fn deal_card(shoe: *Shoe, hand: *Hand) void {
+pub fn deal_card(shoe: *Shoe, hand: *Hand) void {
     hand.cards[hand.num_cards] = shoe.cards[shoe.current_card];
     hand.num_cards += 1;
     shoe.current_card += 1;
 }
 
-fn is_ace(card: *const Card) bool {
+pub fn is_ace(card: *const Card) bool {
     return card.value == 0;
 }
 
-fn is_ten(card: *const Card) bool {
+pub fn is_ten(card: *const Card) bool {
     return card.value > 8;
 }
 
-fn dealer_upcard_is_ace(dealer_hand: *const DealerHand) bool {
+pub fn dealer_upcard_is_ace(dealer_hand: *const DealerHand) bool {
     return is_ace(&dealer_hand.hand.cards[0]);
 }
 
-fn is_blackjack(hand: *const Hand) bool {
+pub fn is_blackjack(hand: *const Hand) bool {
     if (hand.num_cards != 2) {
         return false;
     }
@@ -354,14 +376,14 @@ fn is_blackjack(hand: *const Hand) bool {
     return is_ace(&hand.cards[1]) and is_ten(&hand.cards[0]);
 }
 
-fn get_card_face(game: *const Game, value: u8, suit: u8) []const u8 {
+pub fn get_card_face(game: *const Game, value: u8, suit: u8) []const u8 {
     if (game.face_type == 2) {
         return game.faces2[value][suit];
     }
     return game.faces[value][suit];
 }
 
-fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32 {
+pub fn dealer_get_value(dealer_hand: *const DealerHand, method: CountMethod) u32 {
     var v: u32 = 0;
     var total: u32 = 0;
     var tmp_v: u32 = 0;
@@ -392,21 +414,21 @@ fn draw_dealer_hand(game: *const Game) void {
     const dealer_hand = &game.dealer_hand;
     var card: *const Card = undefined;
 
-    std.debug.print(" ", .{});
+    print(game, " ", .{});
 
     for (0..dealer_hand.hand.num_cards) |i| {
         if (i == 1 and dealer_hand.hide_down_card) {
-            std.debug.print("{s} ", .{get_card_face(game, 13, 0)});
+            print(game, "{s} ", .{get_card_face(game, 13, 0)});
         } else {
             card = &dealer_hand.hand.cards[i];
-            std.debug.print("{s} ", .{get_card_face(game, card.value, card.suit)});
+            print(game, "{s} ", .{get_card_face(game, card.value, card.suit)});
         }
     }
 
-    std.debug.print(" ⇒  {d}\n", .{dealer_get_value(dealer_hand, .Soft)});
+    print(game, " ⇒  {d}\n", .{dealer_get_value(dealer_hand, .Soft)});
 }
 
-fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
+pub fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
     var total: u32 = 0;
 
     for (0..player_hand.hand.num_cards) |x| {
@@ -427,65 +449,65 @@ fn player_get_value(player_hand: *const PlayerHand, method: CountMethod) u32 {
     return total;
 }
 
-fn player_is_busted(player_hand: *const PlayerHand) bool {
+pub fn player_is_busted(player_hand: *const PlayerHand) bool {
     return player_get_value(player_hand, .Soft) > 21;
 }
 
 fn player_draw_hand(game: *const Game, index: usize) void {
     const player_hand = &game.player_hands[index];
 
-    std.debug.print(" ", .{});
+    print(game, " ", .{});
 
     for (0..player_hand.hand.num_cards) |i| {
         const card = &player_hand.hand.cards[i];
-        std.debug.print("{s} ", .{get_card_face(game, card.value, card.suit)});
+        print(game, "{s} ", .{get_card_face(game, card.value, card.suit)});
     }
 
-    std.debug.print(" ⇒  {d}  ", .{player_get_value(player_hand, .Soft)});
+    print(game, " ⇒  {d}  ", .{player_get_value(player_hand, .Soft)});
 
     switch (player_hand.status) {
-        .Lost => std.debug.print("-", .{}),
-        .Won => std.debug.print("+", .{}),
+        .Lost => print(game, "-", .{}),
+        .Won => print(game, "+", .{}),
         else => {},
     }
 
     const bet: f64 = @as(f64, @floatFromInt(player_hand.bet));
-    std.debug.print("${d:.2}", .{bet / 100.0});
+    print(game, "${d:.2}", .{bet / 100.0});
 
     if (!player_hand.played and index == game.current_player_hand) {
-        std.debug.print(" ⇐", .{});
+        print(game, " ⇐", .{});
     }
 
-    std.debug.print("  ", .{});
+    print(game, "  ", .{});
 
     switch (player_hand.status) {
-        .Lost => std.debug.print("{s}", .{if (player_is_busted(player_hand)) "Busted!" else "Lose!"}),
-        .Won => std.debug.print("{s}", .{if (is_blackjack(&player_hand.hand)) "Blackjack!" else "Won!"}),
-        .Push => std.debug.print("Push", .{}),
+        .Lost => print(game, "{s}", .{if (player_is_busted(player_hand)) "Busted!" else "Lose!"}),
+        .Won => print(game, "{s}", .{if (is_blackjack(&player_hand.hand)) "Blackjack!" else "Won!"}),
+        .Push => print(game, "Push", .{}),
         else => {},
     }
 
-    std.debug.print("\n\n", .{});
+    print(game, "\n\n", .{});
 }
 
-fn clear() void {
-    std.debug.print("\x1b[2J\x1b[H", .{});
+fn clear(game: *const Game) void {
+    print(game, "\x1b[2J\x1b[H", .{});
 }
 
-fn draw_hands(game: *const Game) void {
-    clear();
-    std.debug.print("\n Dealer: \n", .{});
+pub fn draw_hands(game: *const Game) void {
+    clear(game);
+    print(game, "\n Dealer: \n", .{});
     draw_dealer_hand(game);
 
     const money: f64 = @as(f64, @floatFromInt(game.money));
-    std.debug.print("\n Player ${d:.2}:\n", .{money / 100.0});
+    print(game, "\n Player ${d:.2}:\n", .{money / 100.0});
 
     for (0..game.total_player_hands) |x| {
         player_draw_hand(game, x);
     }
 }
 
-fn player_can_hit(player_hand: *const PlayerHand) bool {
+pub fn player_can_hit(player_hand: *const PlayerHand) bool {
     return !player_hand.played and
         !player_hand.stood and
         player_get_value(player_hand, .Hard) != 21 and
@@ -493,7 +515,7 @@ fn player_can_hit(player_hand: *const PlayerHand) bool {
         !player_is_busted(player_hand);
 }
 
-fn player_can_stand(player_hand: *const PlayerHand) bool {
+pub fn player_can_stand(player_hand: *const PlayerHand) bool {
     return !player_hand.stood and
         !player_is_busted(player_hand) and
         !is_blackjack(&player_hand.hand);
@@ -509,7 +531,7 @@ fn all_bets(game: *const Game) u32 {
     return bets;
 }
 
-fn player_can_split(game: *const Game) bool {
+pub fn player_can_split(game: *const Game) bool {
     const player_hand = &game.player_hands[game.current_player_hand];
 
     if (player_hand.stood or game.total_player_hands >= MAX_PLAYER_HANDS) {
@@ -524,7 +546,7 @@ fn player_can_split(game: *const Game) bool {
         player_hand.hand.cards[0].value == player_hand.hand.cards[1].value;
 }
 
-fn player_can_dbl(game: *const Game) bool {
+pub fn player_can_dbl(game: *const Game) bool {
     const player_hand = &game.player_hands[game.current_player_hand];
 
     if (game.money < all_bets(game) + player_hand.bet) {
@@ -542,7 +564,7 @@ fn player_can_dbl(game: *const Game) bool {
     return true;
 }
 
-fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
+pub fn player_is_done(game: *Game, player_hand: *PlayerHand) bool {
     if (player_hand.played or
         player_hand.stood or
         is_blackjack(&player_hand.hand) or
@@ -594,11 +616,11 @@ fn need_to_play_dealer_hand(game: *const Game) bool {
     return false;
 }
 
-fn dealer_is_busted(dealer_hand: *const DealerHand) bool {
+pub fn dealer_is_busted(dealer_hand: *const DealerHand) bool {
     return dealer_get_value(dealer_hand, .Soft) > 21;
 }
 
-fn normalize_bet(game: *Game) void {
+pub fn normalize_bet(game: *Game) void {
     if (game.current_bet < MIN_BET) {
         game.current_bet = MIN_BET;
     } else if (game.current_bet > MAX_BET) {
@@ -610,11 +632,11 @@ fn normalize_bet(game: *Game) void {
     }
 }
 
-fn save_game(game: *const Game) !void {
-    const dir = std.fs.cwd();
+pub fn save_game(game: *const Game) !void {
+    const dir = std.Io.Dir.cwd();
 
-    var file = try dir.createFile(SAVE_FILE, .{});
-    defer file.close();
+    const file = try dir.createFile(game.io, SAVE_FILE, .{});
+    defer file.close(game.io);
 
     var buffer: [128]u8 = undefined;
     const formatted = std.fmt.bufPrint(&buffer, "{d}\n{d}\n{d}\n{d}\n{d}\n", .{
@@ -625,17 +647,22 @@ fn save_game(game: *const Game) !void {
         game.face_type,
     }) catch return error.BufferOverflow;
 
-    _ = try file.writeAll(formatted);
+    try file.writeStreamingAll(game.io, formatted);
 }
 
-fn load_game(game: *Game) !void {
-    const file: std.fs.File = std.fs.cwd().openFile(SAVE_FILE, .{}) catch {
+pub fn load_game(game: *Game) !void {
+    const file = std.Io.Dir.cwd().openFile(game.io, SAVE_FILE, .{}) catch {
         return;
     };
-    defer file.close();
+    defer file.close(game.io);
 
     var file_buffer: [256]u8 = undefined;
-    const bytes_read = file.readAll(&file_buffer) catch return;
+    var bytes_read: usize = 0;
+    while (bytes_read < file_buffer.len) {
+        const n = file.readStreaming(game.io, &[_][]u8{file_buffer[bytes_read..]}) catch break;
+        if (n == 0) break;
+        bytes_read += n;
+    }
 
     if (bytes_read == 0) return;
 
@@ -664,7 +691,7 @@ fn load_game(game: *Game) !void {
     }
 }
 
-fn pay_hands(game: *Game) !void {
+pub fn pay_hands(game: *Game) !void {
     const dealer_hand = &game.dealer_hand;
     var player_hand: *PlayerHand = undefined;
     const dhv = dealer_get_value(dealer_hand, .Soft);
@@ -700,7 +727,7 @@ fn pay_hands(game: *Game) !void {
     try save_game(game);
 }
 
-fn play_dealer_hand(game: *Game) !void {
+pub fn play_dealer_hand(game: *Game) !void {
     var dealer_hand = &game.dealer_hand;
     var soft_count: u32 = 0;
     var hard_count: u32 = 0;
@@ -728,30 +755,27 @@ fn play_dealer_hand(game: *Game) !void {
     try pay_hands(game);
 }
 
-fn read_line(buffer: []u8) ![]u8 {
-    const stdin = std.fs.File.stdin();
+pub fn read_line(game: *Game, buffer: []u8) ![]u8 {
     var idx: usize = 0;
 
     while (idx < buffer.len) {
-        var byte: [1]u8 = undefined;
-        const n = stdin.read(&byte) catch break;
-        if (n == 0) break;
-        if (byte[0] == '\n') break;
-        buffer[idx] = byte[0];
+        const byte = read_byte(game) orelse break;
+        if (byte == '\n') break;
+        buffer[idx] = byte;
         idx += 1;
     }
 
     return buffer[0..idx];
 }
 
-fn get_new_bet(game: *Game) !void {
-    clear();
+pub fn get_new_bet(game: *Game) !void {
+    clear(game);
     draw_hands(game);
 
-    std.debug.print(" Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
+    print(game, " Current Bet: ${d}  Enter New Bet: $", .{game.current_bet / 100});
 
     var input: [32]u8 = undefined;
-    const result = try read_line(&input);
+    const result = try read_line(game, &input);
     const tmp = std.fmt.parseInt(u32, result, 10) catch 0;
 
     game.current_bet = tmp * 100;
@@ -760,14 +784,14 @@ fn get_new_bet(game: *Game) !void {
     try deal_new_hand(game);
 }
 
-fn get_new_num_decks(game: *Game) anyerror!void {
-    clear();
+pub fn get_new_num_decks(game: *Game) anyerror!void {
+    clear(game);
     draw_hands(game);
 
-    std.debug.print(" Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
+    print(game, " Number Of Decks: {d}  Enter New Number Of Decks (1-8): ", .{game.num_decks});
 
     var input: [8]u8 = undefined;
-    const result = try read_line(&input);
+    const result = try read_line(game, &input);
     var tmp = std.fmt.parseInt(u8, result, 10) catch 1;
 
     if (tmp < 1) tmp = 1;
@@ -778,17 +802,15 @@ fn get_new_num_decks(game: *Game) anyerror!void {
     try game_options(game);
 }
 
-fn get_new_deck_type(game: *Game) !void {
-    clear();
+pub fn get_new_deck_type(game: *Game) !void {
+    clear(game);
     draw_hands(game);
-    std.debug.print(" (1) Regular  (2) Aces  (3) Jacks  (4) Aces & Jacks  (5) Sevens  (6) Eights\n", .{});
+    print(game, " (1) Regular  (2) Aces  (3) Jacks  (4) Aces & Jacks  (5) Sevens  (6) Eights\n", .{});
 
-    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
-        if (result == 0) continue;
+        input[0] = read_byte(game) orelse return;
 
         const tmp = std.fmt.parseInt(u8, input[0..1], 10) catch 0;
         game.deck_type = @as(u8, tmp);
@@ -799,7 +821,7 @@ fn get_new_deck_type(game: *Game) !void {
             }
             try build_new_shoe(game);
         } else {
-            clear();
+            clear(game);
             draw_hands(game);
             try get_new_deck_type(game);
             return;
@@ -812,23 +834,21 @@ fn get_new_deck_type(game: *Game) !void {
     }
 }
 
-fn get_new_face_type(game: *Game) !void {
-    clear();
+pub fn get_new_face_type(game: *Game) !void {
+    clear(game);
     draw_hands(game);
-    std.debug.print(" (1) A♠  (2) 🂡\n", .{});
+    print(game, " (1) A♠  (2) 🂡\n", .{});
 
-    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
-        if (result == 0) continue;
+        input[0] = read_byte(game) orelse return;
 
         switch (input[0]) {
             '1' => game.face_type = 1,
             '2' => game.face_type = 2,
             else => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try get_new_face_type(game);
                 return;
@@ -842,30 +862,28 @@ fn get_new_face_type(game: *Game) !void {
     }
 }
 
-fn game_options(game: *Game) !void {
-    clear();
+pub fn game_options(game: *Game) !void {
+    clear(game);
     draw_hands(game);
-    std.debug.print(" (N) Number of Decks  (T) Deck Type  (F) Face Type  (B) Back\n", .{});
+    print(game, " (N) Number of Decks  (T) Deck Type  (F) Face Type  (B) Back\n", .{});
 
-    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
-        if (result == 0) continue;
+        input[0] = read_byte(game) orelse return;
 
         switch (input[0] | 0x20) {
             'n' => try get_new_num_decks(game),
             't' => try get_new_deck_type(game),
             'f' => try get_new_face_type(game),
             'b' => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try bet_options(game);
                 return;
             },
             else => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try game_options(game);
                 return;
@@ -875,15 +893,13 @@ fn game_options(game: *Game) !void {
     }
 }
 
-fn bet_options(game: *Game) anyerror!void {
-    std.debug.print(" (D) Deal Hand  (B) Change Bet  (O) Options  (Q) Quit\n", .{});
+pub fn bet_options(game: *Game) anyerror!void {
+    print(game, " (D) Deal Hand  (B) Change Bet  (O) Options  (Q) Quit\n", .{});
 
-    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
-        if (result == 0) continue;
+        input[0] = read_byte(game) orelse return;
 
         switch (input[0] | 0x20) {
             'd' => {},
@@ -891,10 +907,10 @@ fn bet_options(game: *Game) anyerror!void {
             'o' => try game_options(game),
             'q' => {
                 game.quitting = true;
-                clear();
+                clear(game);
             },
             else => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try bet_options(game);
                 return;
@@ -904,7 +920,7 @@ fn bet_options(game: *Game) anyerror!void {
     }
 }
 
-fn process(game: *Game) !void {
+pub fn process(game: *Game) !void {
     if (more_hands_to_play(game)) {
         try play_more_hands(game);
         return;
@@ -915,7 +931,7 @@ fn process(game: *Game) !void {
     try bet_options(game);
 }
 
-fn player_hit(game: *Game) anyerror!void {
+pub fn player_hit(game: *Game) anyerror!void {
     var player_hand = &game.player_hands[game.current_player_hand];
     deal_card(&game.shoe, &player_hand.hand);
 
@@ -928,7 +944,7 @@ fn player_hit(game: *Game) anyerror!void {
     try player_get_action(game);
 }
 
-fn player_stand(game: *Game) !void {
+pub fn player_stand(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     player_hand.stood = true;
@@ -944,7 +960,7 @@ fn player_stand(game: *Game) !void {
     try bet_options(game);
 }
 
-fn player_split(game: *Game) !void {
+pub fn player_split(game: *Game) !void {
     const new_hand = PlayerHand{
         .bet = game.current_bet,
         .hand = Hand{
@@ -994,7 +1010,7 @@ fn player_split(game: *Game) !void {
     try player_get_action(game);
 }
 
-fn player_dbl(game: *Game) !void {
+pub fn player_dbl(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     deal_card(&game.shoe, &player_hand.hand);
@@ -1006,26 +1022,19 @@ fn player_dbl(game: *Game) !void {
     }
 }
 
-fn player_get_action(game: *Game) anyerror!void {
+pub fn player_get_action(game: *Game) anyerror!void {
     const player_hand = &game.player_hands[game.current_player_hand];
-    std.debug.print(" ", .{});
+    print(game, " ", .{});
 
-    if (player_can_hit(player_hand)) std.debug.print("(H) Hit  ", .{});
-    if (player_can_stand(player_hand)) std.debug.print("(S) Stand  ", .{});
-    if (player_can_split(game)) std.debug.print("(P) Split  ", .{});
-    if (player_can_dbl(game)) std.debug.print("(D) Double  ", .{});
+    if (player_can_hit(player_hand)) print(game, "(H) Hit  ", .{});
+    if (player_can_stand(player_hand)) print(game, "(S) Stand  ", .{});
+    if (player_can_split(game)) print(game, "(P) Split  ", .{});
+    if (player_can_dbl(game)) print(game, "(D) Double  ", .{});
 
-    std.debug.print("\n", .{});
-
-    var stdin = std.fs.File.stdin();
-    var reader = stdin.readerStreaming(&.{});
+    print(game, "\n", .{});
 
     while (true) {
-        var byte_buf: [1]u8 = undefined;
-        var buffers = [_][]u8{&byte_buf};
-        _ = reader.interface.readVec(&buffers) catch return;
-        const result = byte_buf[0];
-        if (result == 0) continue;
+        const result = read_byte(game) orelse return;
 
         switch (result | 0x20) {
             'h' => try player_hit(game),
@@ -1033,7 +1042,7 @@ fn player_get_action(game: *Game) anyerror!void {
             'p' => try player_split(game),
             'd' => try player_dbl(game),
             else => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try player_get_action(game);
                 return;
@@ -1044,7 +1053,7 @@ fn player_get_action(game: *Game) anyerror!void {
     }
 }
 
-fn insure_hand(game: *Game) !void {
+pub fn insure_hand(game: *Game) !void {
     var player_hand = &game.player_hands[game.current_player_hand];
 
     player_hand.bet /= 2;
@@ -1057,7 +1066,7 @@ fn insure_hand(game: *Game) !void {
     try bet_options(game);
 }
 
-fn no_insurance(game: *Game) !void {
+pub fn no_insurance(game: *Game) !void {
     var dealer_hand = &game.dealer_hand;
     var player_hand: *PlayerHand = undefined;
 
@@ -1082,15 +1091,13 @@ fn no_insurance(game: *Game) !void {
     try player_get_action(game);
 }
 
-fn ask_insurance(game: *Game) !void {
-    std.debug.print(" Insurance?  (Y) Yes  (N) No\n", .{});
+pub fn ask_insurance(game: *Game) !void {
+    print(game, " Insurance?  (Y) Yes  (N) No\n", .{});
 
-    var stdin = std.fs.File.stdin();
     var input: [1]u8 = undefined;
 
     while (true) {
-        const result = stdin.read(input[0..1]) catch return;
-        if (result == 0) continue;
+        input[0] = read_byte(game) orelse return;
 
         switch (input[0] | 0x20) {
             'y' => {
@@ -1102,7 +1109,7 @@ fn ask_insurance(game: *Game) !void {
                 break;
             },
             else => {
-                clear();
+                clear(game);
                 draw_hands(game);
                 try ask_insurance(game);
                 return;
@@ -1113,7 +1120,7 @@ fn ask_insurance(game: *Game) !void {
     }
 }
 
-fn deal_new_hand(game: *Game) !void {
+pub fn deal_new_hand(game: *Game) !void {
     const cards = [_]Card{Card{ .value = 0, .suit = 0 }} ** MAX_CARDS_PER_HAND;
 
     const hand = Hand{
@@ -1169,13 +1176,13 @@ fn deal_new_hand(game: *Game) !void {
     try save_game(game);
 }
 
-fn buffer_on(stdin: *const std.fs.File) !void {
-    const term = try std.posix.tcgetattr(stdin.handle);
-    try std.posix.tcsetattr(stdin.handle, .NOW, term);
+pub fn buffer_on(tty: *const std.Io.File) !void {
+    const term = std.posix.tcgetattr(tty.handle) catch return;
+    try std.posix.tcsetattr(tty.handle, .NOW, term);
 }
 
-fn buffer_off(stdin: *const std.fs.File) !void {
-    var term = try std.posix.tcgetattr(stdin.handle);
+pub fn buffer_off(tty: *const std.Io.File) !void {
+    var term = std.posix.tcgetattr(tty.handle) catch return;
     term.lflag.ICANON = false;
-    try std.posix.tcsetattr(stdin.handle, .NOW, term);
+    try std.posix.tcsetattr(tty.handle, .NOW, term);
 }
