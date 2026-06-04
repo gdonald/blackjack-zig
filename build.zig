@@ -33,6 +33,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tests/all.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
             .imports = &.{
                 .{ .name = "bj", .module = bj_module },
                 .{ .name = "main", .module = main_module },
