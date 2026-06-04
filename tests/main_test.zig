@@ -2,10 +2,6 @@ const std = @import("std");
 const testing = std.testing;
 const bj = @import("bj");
 
-// main() opens raw terminal mode and loops on stdin, so it cannot run
-// headless. What it contributes is the starting Game it hands to run_game,
-// so that initial state is what these tests pin down.
-
 test "a fresh game starts with the table defaults" {
     const game = bj.Game.init();
 

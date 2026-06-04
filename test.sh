@@ -7,9 +7,6 @@ rm -rf zig-out/coverage
 zig build
 zig build coverage
 
-# Drive the real binary so main.zig and the terminal setup are measured too.
-# The eights deck (deck_type 6) makes every dealt card an eight, so a stand
-# then quit is fully deterministic with no RNG dependence.
 printf '8\n100000\n500\n6\n0\n' > bj.txt
 printf 'sq' | kcov --include-pattern=src/ zig-out/coverage zig-out/bin/bj >/dev/null 2>&1 || true
 rm -f bj.txt

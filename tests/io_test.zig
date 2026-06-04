@@ -4,7 +4,6 @@ const bj = @import("bj");
 
 const Card = bj.Card;
 
-// Card value encoding: 0 = ace, 6 = seven, 7 = eight, 9 = ten, 12 = king.
 const ACE: u8 = 0;
 const FIVE: u8 = 4;
 const SEVEN: u8 = 6;
@@ -21,8 +20,6 @@ extern "c" fn openpty(
     winp: ?*const anyopaque,
 ) c_int;
 
-// Drives the game's I/O against in-memory buffers: scripted keystrokes in,
-// rendered output captured out. No terminal, no RNG dependence.
 const Ctx = struct {
     threaded: std.Io.Threaded = std.Io.Threaded.init_single_threaded,
     out_buf: [1 << 16]u8 = undefined,
