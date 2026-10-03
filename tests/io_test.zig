@@ -210,7 +210,7 @@ test "get_new_bet reads a typed amount then deals and stands to quit" {
     ctx.wire("1000\nsq");
     ctx.game.money = 1000000;
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.get_new_bet(&ctx.game);
@@ -224,7 +224,7 @@ test "get_new_bet clamps a non numeric amount to the minimum" {
     ctx.wire("abc\nsq");
     ctx.game.money = 1000000;
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.get_new_bet(&ctx.game);
@@ -236,7 +236,7 @@ test "player_get_action stands and pays out the hand" {
     var ctx: Ctx = .{};
     ctx.wire("sq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.player_get_action(&ctx.game);
@@ -248,7 +248,7 @@ test "player_get_action hits into a bust" {
     var ctx: Ctx = .{};
     ctx.wire("hq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.player_get_action(&ctx.game);
@@ -261,7 +261,7 @@ test "player_get_action doubles down into a bust" {
     var ctx: Ctx = .{};
     ctx.wire("dq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.player_get_action(&ctx.game);
@@ -273,7 +273,7 @@ test "player_get_action rejects an unknown key then stands" {
     var ctx: Ctx = .{};
     ctx.wire("zsq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_table(&ctx.game);
 
     try bj.player_get_action(&ctx.game);
@@ -285,7 +285,7 @@ test "player_split refuses a non pair and asks for an action" {
     var ctx: Ctx = .{};
     ctx.wire("sq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_player(&ctx.game, &[_]u8{ EIGHT, SEVEN });
     set_dealer(&ctx.game, &[_]u8{ EIGHT, EIGHT }, false);
 
@@ -312,7 +312,7 @@ test "ask_insurance declines then plays the hand out" {
     var ctx: Ctx = .{};
     ctx.wire("nsq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_dealer(&ctx.game, &[_]u8{ ACE, EIGHT }, true);
     set_player(&ctx.game, &[_]u8{ EIGHT, EIGHT });
 
@@ -325,7 +325,7 @@ test "ask_insurance rejects an unknown key then declines" {
     var ctx: Ctx = .{};
     ctx.wire("xnsq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_dealer(&ctx.game, &[_]u8{ ACE, EIGHT }, true);
     set_player(&ctx.game, &[_]u8{ EIGHT, EIGHT });
 
@@ -400,7 +400,7 @@ test "player_get_action hits without busting then stands" {
     var ctx: Ctx = .{};
     ctx.wire("hsq");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{FIVE} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(FIVE)));
     set_dealer(&ctx.game, &[_]u8{ EIGHT, EIGHT }, false);
     set_player(&ctx.game, &[_]u8{ FIVE, FIVE });
 
@@ -450,7 +450,7 @@ test "declining insurance on an already finished hand plays the dealer" {
     var ctx: Ctx = .{};
     ctx.wire("q");
     ctx.game.num_decks = 8;
-    set_shoe(&ctx.game, &([_]u8{EIGHT} ** 20));
+    set_shoe(&ctx.game, &@as([20]u8, @splat(EIGHT)));
     set_dealer(&ctx.game, &[_]u8{ EIGHT, EIGHT }, true);
     set_player(&ctx.game, &[_]u8{ EIGHT, EIGHT });
     ctx.game.player_hands[0].played = true;

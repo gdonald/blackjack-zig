@@ -44,13 +44,12 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(unit_tests).step);
 
-    const coverage_dir = b.pathJoin(&.{ b.install_path, "coverage" });
     const run_coverage = b.addSystemCommand(&.{
         "kcov",
         "--clean",
         "--include-pattern=src/",
-        coverage_dir,
     });
+    run_coverage.addDirectoryArg(.{ .relative = .{ .base = .install_prefix, .sub_path = "coverage" } });
     run_coverage.addArtifactArg(unit_tests);
     const coverage_step = b.step("coverage", "Generate test coverage with kcov");
     coverage_step.dependOn(&run_coverage.step);

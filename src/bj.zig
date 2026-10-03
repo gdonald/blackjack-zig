@@ -86,7 +86,7 @@ const Shoe = struct {
     fn init() Shoe {
         return Shoe{
             .num_cards = 0,
-            .cards = [_]Card{Card.new()} ** (CARDS_PER_DECK * MAX_DECKS),
+            .cards = @splat(Card.new()),
             .current_card = undefined,
         };
     }
@@ -1121,7 +1121,7 @@ pub fn ask_insurance(game: *Game) !void {
 }
 
 pub fn deal_new_hand(game: *Game) !void {
-    const cards = [_]Card{Card{ .value = 0, .suit = 0 }} ** MAX_CARDS_PER_HAND;
+    const cards: [MAX_CARDS_PER_HAND]Card = @splat(Card{ .value = 0, .suit = 0 });
 
     const hand = Hand{
         .cards = cards,
